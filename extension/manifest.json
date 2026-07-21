@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Hyperion Browser Bridge",
+  "version": "0.1.0",
+  "description": "Native Messaging bridge for Hyperion Browser - connects AI agents to your real Chrome browser",
+  "permissions": [
+    "debugger",
+    "tabs",
+    "activeTab",
+    "storage",
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Hyperion Browser",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  }
+}

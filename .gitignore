@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.png
+*.jpg
+*.webm
+*.mp4
+*.log
+test-*.js
+debug-dom.js
+whatsapp*.js
+.DS_Store

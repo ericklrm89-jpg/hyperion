@@ -1,0 +1,40 @@
+{
+  "name": "hyperion-browser",
+  "version": "0.1.0",
+  "description": "Hyperion Browser - Universal MCP server for real Chrome browser automation. Works with Cursor, Claude Code, OpenCode, Hermes, AGY, and any MCP-compatible agent.",
+  "main": "dist/index.js",
+  "bin": {
+    "hyperion": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "jest --config jest.config.js",
+    "test:integration": "jest --config jest.config.js --testMatch '**/tests/integration/**/*.test.ts'",
+    "lint": "eslint src/**/*.ts",
+    "extension:install": "node dist/native-host/install.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "pixelmatch": "^5.3.0",
+    "pngjs": "^7.0.0",
+    "uuid": "^9.0.0",
+    "ws": "^8.16.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.11.0",
+    "@types/uuid": "^9.0.7",
+    "@types/ws": "^8.5.10",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

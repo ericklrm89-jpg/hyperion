@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Hyperion Test Page</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    .card { border: 1px solid #ddd; padding: 16px; margin: 8px 0; border-radius: 8px; }
+    .card h3 { margin: 0 0 8px; }
+    .price { color: green; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Hyperion Test Page</h1>
+  <p>This is a test page for Hyperion Browser integration tests.</p>
+
+  <h2>Table</h2>
+  <table id="test-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Age</th>
+        <th>City</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Alice</td><td>30</td><td>New York</td></tr>
+      <tr><td>Bob</td><td>25</td><td>San Francisco</td></tr>
+      <tr><td>Charlie</td><td>35</td><td>London</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Cards</h2>
+  <div id="card-container">
+    <div class="card">
+      <h3>Product 1</h3>
+      <p>Description of product 1</p>
+      <span class="price">$19.99</span>
+    </div>
+    <div class="card">
+      <h3>Product 2</h3>
+      <p>Description of product 2</p>
+      <span class="price">$29.99</span>
+    </div>
+    <div class="card">
+      <h3>Product 3</h3>
+      <p>Description of product 3</p>
+      <span class="price">$39.99</span>
+    </div>
+  </div>
+
+  <h2>Form</h2>
+  <form id="test-form">
+    <input id="name-input" type="text" placeholder="Name" />
+    <input id="email-input" type="email" placeholder="Email" />
+    <select id="country-select">
+      <option value="us">United States</option>
+      <option value="uk">United Kingdom</option>
+      <option value="ca">Canada</option>
+    </select>
+    <button id="submit-btn" type="submit">Submit</button>
+  </form>
+
+  <h2>JSON-LD</h2>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Hyperion Test",
+      "url": "https://hyperion.test"
+    }
+  </script>
+</body>
+</html>
