@@ -1,0 +1,57 @@
+const http = require('http');
+const WebSocket = require('ws');
+
+http.get('http://localhost:9222/json', res => {
+  let data = '';
+  res.on('data', chunk => data += chunk);
+  res.on('end', () => {
+    const tabs = JSON.parse(data);
+    const t = tabs.find(x => x.type === 'page' && x.url.includes('gemini.google.com') && !x.url.includes('RotateCookiesPage'));
+    if (!t) return console.log('Tab no encontrada');
+
+    const ws = new WebSocket(t.webSocketDebuggerUrl);
+    ws.on('open', () => {
+      ws.send(JSON.stringify({
+        id: 1,
+        method: 'Runtime.evaluate',
+        params: {
+          expression: `
+            (function() {
+              function inspectPromptBox(root = document) {
+                let list = [];
+                let all = Array.from(root.querySelectorAll('*'));
+                for (let el of all) {
+                  var r = el.getBoundingClientRect();
+                  if (r.width > 0 && r.height > 0 && r.left > 350 && r.left < 450 && r.top > 400 && r.top < 650) {
+                    list.push({
+                      tag: el.tagName,
+                      aria: el.getAttribute('aria-label'),
+                      title: el.getAttribute('title'),
+                      cls: el.getAttribute('class'),
+                      rect: { left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }
+                    });
+                  }
+                  if (el.shadowRoot) {
+                    list = list.concat(inspectPromptBox(el.shadowRoot));
+                  }
+                }
+                return list;
+              }
+              return JSON.stringify(inspectPromptBox(document));
+            })()
+          `
+        }
+      }));
+    });
+
+    ws.on('message', msg => {
+      const res = JSON.parse(msg);
+      if (res.id === 1 && res.result) {
+        console.log('--- ELEMENTOS EN EL ÁREA DEL BOTÓN (+) ENCONTRADOS ---');
+        const items = JSON.parse(res.result.value || '[]');
+        console.dir(items, { depth: null });
+        process.exit(0);
+      }
+    });
+  });
+});

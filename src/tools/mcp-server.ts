@@ -185,6 +185,55 @@ export class MCPServer {
             },
             required: ['selector']
           }
+        },
+        {
+          name: 'browser_overlay_inject',
+          description: 'Inject persistent overlay to map interactive elements with numbered rectangles. Kills any existing overlay first.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              intervalMs: { type: 'number', default: 2000, description: 'Refresh interval in ms' },
+              includePostLinks: { type: 'boolean', default: true, description: 'Include social media post/reel links' },
+              gridSize: { type: 'number', default: 200, description: 'Grid size in px for stable IDs' }
+            }
+          }
+        },
+        {
+          name: 'browser_overlay_kill',
+          description: 'Kill the overlay and clean up all intervals/timeouts',
+          inputSchema: { type: 'object', properties: {} }
+        },
+        {
+          name: 'browser_overlay_get',
+          description: 'Get current overlay element data (array of {sid, tag, text, x, y, w, h})',
+          inputSchema: { type: 'object', properties: {} }
+        },
+        {
+          name: 'browser_overlay_click',
+          description: 'Click an overlay element by its SID number',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              sid: { type: 'number', description: 'Element SID number shown in overlay' }
+            },
+            required: ['sid']
+          }
+        },
+        {
+          name: 'browser_overlay_find',
+          description: 'Find overlay element by text content',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              text: { type: 'string', description: 'Text to search for in element labels' }
+            },
+            required: ['text']
+          }
+        },
+        {
+          name: 'browser_layer_detect',
+          description: 'Detect active UI layer (dialog, sidebar, content, bottom, unknown)',
+          inputSchema: { type: 'object', properties: {} }
         }
       ]
     }))
@@ -307,6 +356,56 @@ export class MCPServer {
               return { content: [{ type: 'text', text: `Selector ${selector} found` }] }
             }
             return { content: [{ type: 'text', text: `Selector ${selector} not found within timeout` }] }
+          }
+
+          case 'browser_overlay_inject': {
+            await this.hyperion.overlay.inject({
+              intervalMs: (args.intervalMs as number) || 2000,
+              includePostLinks: args.includePostLinks !== false,
+              gridSize: (args.gridSize as number) || 200
+            })
+            const data = await this.hyperion.overlay.getData()
+            return {
+              content: [
+                { type: 'text', text: `Overlay injected. ${data.elements.length} elements mapped.` },
+                { type: 'text', text: JSON.stringify(data.elements.slice(0, 50)) }
+              ]
+            }
+          }
+
+          case 'browser_overlay_kill': {
+            await this.hyperion.overlay.kill()
+            return { content: [{ type: 'text', text: 'Overlay killed and processes cleaned up' }] }
+          }
+
+          case 'browser_overlay_get': {
+            const data = await this.hyperion.overlay.getData()
+            return {
+              content: [
+                { type: 'text', text: `${data.type} - ${data.elements.length} elements` },
+                { type: 'text', text: JSON.stringify(data.elements.slice(0, 100)) }
+              ]
+            }
+          }
+
+          case 'browser_overlay_click': {
+            const sid = args.sid as number
+            await this.hyperion.overlay.clickElement(sid)
+            return { content: [{ type: 'text', text: `Clicked element [${sid}]` }] }
+          }
+
+          case 'browser_overlay_find': {
+            const searchText = args.text as string
+            const el = await this.hyperion.overlay.findElementByText(searchText)
+            if (el) {
+              return { content: [{ type: 'text', text: JSON.stringify(el) }] }
+            }
+            return { content: [{ type: 'text', text: `No element found with text "${searchText}"` }] }
+          }
+
+          case 'browser_layer_detect': {
+            const layer = await this.hyperion.overlay.getActiveLayer()
+            return { content: [{ type: 'text', text: JSON.stringify(layer) }] }
           }
 
           default:

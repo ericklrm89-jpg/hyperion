@@ -15,8 +15,6 @@ AGY      ├───
 CODEX    ─┘
 ```
 
-No importa qué agente uses. Todos hablan MCP (Model Context Protocol) o CLI. Hyperion es solo el **motor de navegador** que recibe comandos (`click`, `type`, `screenshot`, `extract`) y los ejecuta en Chrome real vía Chrome DevTools Protocol.
-
 ## 3 Modos de Conexión
 
 | Modo | Método | Anti-detección | Chrome 136+ | Recomendado |
@@ -51,6 +49,134 @@ No importa qué agente uses. Todos hablan MCP (Model Context Protocol) o CLI. Hy
 - Extension + Native Messaging → evita popup "Allow remote debugging?" de Chrome 136+
 - `Emulation.setFocusEmulationEnabled` → tabs en background no se throttlean
 
+## Arquitectura
+
+```
+hyperion/
+├── src/
+│   ├── index.ts                    Entry point + MCP server
+│   ├── cli.ts                      CLI entry point
+│   ├── config.ts                   Configuration
+│   ├── connection/                 Connection Manager (3 modos)
+│   ├── cdp/                        CDP domain lifecycle, commands, events
+│   ├── primitives/                 Click, Type, Screenshot, Navigate, etc.
+│   ├── tools/                      MCP tool definitions (25+ tools)
+│   │   └── mcp-server.ts           MCP server implementation
+│   ├── extraction/                 DOM-first extraction engine
+│   ├── perception/                 ⬅️ HyperScene builder (7 capas)
+│   ├── layers/                     ⬅️ Platform-specific layer detection
+│   ├── stealth/                    Anti-detection engine
+│   └── screenshot/                 Screenshot + overlay capture
+├── extension/                      Chrome Extension (Modo 1)
+├── native-host/                    Native Messaging Host
+├── scripts/                        ⬅️ Platform automation scripts
+│   ├── instagram/                  Instagram scripts
+│   ├── whatsapp/                   WhatsApp scripts
+│   ├── tiktok/                     TikTok scripts
+│   └── facebook/                   Facebook scripts
+└── tests/
+```
+
+## Platform Modules Architecture
+
+Cada plataforma tiene su propio módulo en `src/layers/` con detectores de UI específicos.
+Los scripts de automation van en `scripts/` por plataforma.
+
+```
+src/layers/
+├── instagram.ts                    Detector de capas Instagram
+│   ├── detectDialog()              Find active dialog (create, share, menu)
+│   ├── detectSidebar()             Left nav bar bounds
+│   ├── detectProfileGrid()         Post/reel grid items
+│   └── detectPostActions()         3-dot menu, save, share
+
+├── whatsapp.ts                     Detector de capas WhatsApp Web
+│   ├── detectChatList()            Contact list panel
+│   ├── detectMessageArea()         Message thread view
+│   ├── detectInputBox()            Message input area
+│   └── detectAttachments()         Media/attachment panel
+
+├── tiktok.ts                       Detector de capas TikTok
+│   ├── detectVideoFeed()           Scrolling video feed
+│   ├── detectComments()            Comments panel/drawer
+│   ├── detectUploadFlow()          Upload wizard steps
+│   └── detectEditor()              Video editor toolbar
+
+├── facebook.ts                     Detector de capas Facebook
+│   ├── detectNewsFeed()            Main feed area
+│   ├── detectStories()             Stories bar
+│   ├── detectCreatePost()          Post creation dialog
+│   └── detectReactions()           Like/love/wow picker
+
+└── gemini.ts                       Detector de capas Gemini Web
+    ├── detectConversation()        Chat thread
+    ├── detectInputArea()           Prompt input
+    └── detectModelSelector()       Model picker dropdown
+```
+
+### Overlay System (In-Browser)
+
+Sistema de overlay visual **persistente** inyectado en la página. Usa `position:fixed` con z-index máximo para mostrar rectángulos numerados sobre elementos interactivos.
+
+```
+Overlay
+├── Estilo único (.hy-st)           Inyectado una vez en <head>
+├── Divs contenedores (.hy-el)      position:fixed, border coloreado
+├── Selector de elementos           button, a[href], input, [role=*], etc.
+├── IDs estables                    hash( tag + href/aria/text + grilla 200px )
+├── Resize listener                 window.addEventListener('resize', render)
+└── Intervalo de refresco           2000ms (configurable)
+```
+
+Reglas del overlay:
+- **NUNCA matar el overlay entre scripts** → una sola inyección, verificar `__HY_KILL` antes de cleanup
+- **Siempre incluir post links** → `a[href*="/p/"],a[href*="/reel/"]` incluso sin texto visible
+- **IDs basados en href** para links, **grilla 200px** para no-links → estables ante micro-desplazamientos
+
+### Layer Detection (elementsFromPoint)
+
+Sistema para identificar en qué capa de la UI está interactuando el usuario:
+
+```typescript
+// Pseudocódigo del detector de capas
+function getActiveLayer(): 'dialog' | 'sidebar' | 'content' | 'unknown' {
+  const points = elementosEnVentana();
+  if (hayDialogActivo(points)) return 'dialog';
+  if (estamosEnSidebar(points)) return 'sidebar';
+  if (estamosEnFeed(points)) return 'content';
+  return 'unknown';
+}
+```
+
+- Usa `document.elementsFromPoint(x, y)` para determinar qué capa está activa
+- Detecta `[role="dialog"]` por su posición central y tamaño mínimo
+- Filtra elementos por capa para mostrar solo los relevantes en el overlay
+
+### Click System (5-Tier Cascade)
+
+```
+1. CDP Click coordinate          click(x, y) vía Input.dispatchMouseEvent
+2. CDP Click by selector         document.querySelector(sel).click()
+3. Runtime click with events     mousedown + mouseup + click event dispatch
+4. Element.focus() + Enter       Para inputs y botones de formulario
+5. JavaScript fallback           onclick/onmousedown handler invocation
+```
+
+Clicks por overlay ID:
+```typescript
+// Click en elemento con ID visible [42]
+async function clickOverlayId(id: number) {
+  const result = await browser.evaluate(`
+    (function() {
+      const el = document.querySelector('.hy-el');
+      // ... find element by sid, get center coordinates
+      return { x, y };
+    })()
+  `);
+  await browser.click(result.x, result.y);
+}
+```
+
 ## Quick Start
 
 ```bash
@@ -76,20 +202,36 @@ hyperion screenshot --full-page
 hyperion extract "table" --format csv
 ```
 
-## Arquitectura
+## Scripts de Automatización
 
+Los scripts en `scripts/` son módulos Node.js autocontenidos que usan Hyperion vía `import { Hyperion } from 'hyperion-browser'`.
+
+Estructura típica:
+```typescript
+import { Hyperion } from 'hyperion-browser';
+
+async function main() {
+  const h = new Hyperion({ mode: 'attach', websocketUrl: WS_URL });
+  await h.connect();
+  
+  // 1. Inyectar overlay persistente
+  await injectOverlay(h);
+  
+  // 2. Mapear elementos
+  const elements = await mapElements(h);
+  
+  // 3. Interactuar
+  await h.click(elements[5].x, elements[5].y);
+  
+  await h.disconnect();
+}
 ```
-hyperion/
-├── src/
-│   ├── index.ts                    Entry point + MCP server
-│   ├── connection/                 Connection Manager (3 modos)
-│   ├── cdp/                        CDP domain lifecycle, commands, events
-│   ├── primitives/                 Click, Type, Screenshot, Navigate, etc.
-│   ├── tools/                      MCP tool definitions (25+ tools)
-│   ├── extraction/                 DOM-first extraction engine
-│   ├── perception/                 HyperScene builder (7 capas)
-│   ├── stealth/                    Anti-detection engine
-│   └── screenshot/                 Screenshot + overlay capture
-├── extension/                      Chrome Extension (Modo 1)
-├── native-host/                    Native Messaging Host
-└── tests/
+
+## Scripts de Referencia (Instagram)
+
+| Script | Propósito |
+|--------|-----------|
+| `instagram-one-overlay.js` | Overlay persistente estable con resize listener |
+| `instagram-publish-v2.js` | Publicar reel con caption |
+| `instagram-delete-flow.js` | Eliminar reel (3-dot → Eliminar → confirmar) |
+| `instagram-scroll-posts.js` | Desplazar grilla y listar posts |

@@ -8,7 +8,8 @@ import {
   ScrollPrimitive,
   SelectPrimitive,
   UploadPrimitive,
-  DialogPrimitive
+  DialogPrimitive,
+  OverlayPrimitive
 } from './primitives'
 
 export class Hyperion {
@@ -21,6 +22,7 @@ export class Hyperion {
   public select: SelectPrimitive
   public upload: UploadPrimitive
   public dialog: DialogPrimitive
+  public overlay: OverlayPrimitive
 
   private config: HyperionConfig
 
@@ -36,6 +38,7 @@ export class Hyperion {
     this.select = new SelectPrimitive(this.cxn)
     this.upload = new UploadPrimitive(this.cxn)
     this.dialog = new DialogPrimitive(this.cxn)
+    this.overlay = new OverlayPrimitive(this.cxn)
   }
 
   async connect(): Promise<void> {

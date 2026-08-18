@@ -1,11 +1,52 @@
+# Dependencies
 node_modules/
-dist/
+
+# TypeScript Build Output (built on install)
+# dist/ is ignored for dev, but we can include package build instructions
+
+# Temporary profiles & directories
+_temp/
+debug_screenshots/
+chrome_debug_profile/
+diego_profile/
+profiles/
+SadTalker/
+fairdraw-remotion/
+
+# Media & Large Binary Files
+media/
 *.png
 *.jpg
-*.webm
+*.jpeg
+*.gif
+*.webp
 *.mp4
+*.webm
+*.avi
+*.mkv
+*.wav
+*.mp3
+
+# Logs & Environment
 *.log
-test-*.js
-debug-dom.js
-whatsapp*.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env.local
+.env.*.local
+
+# OS Specific
 .DS_Store
+Thumbs.db
+
+# Temporary scratch and debug scripts
+archive_scripts/
+test-*.js
+debug-*.js
+whatsapp*.js
+overlay-data.json
+instagram-elements*.json
+fb_*.png
+ig_*.png
+tt_*.png

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "hyperion": {
+      "command": "node",
+      "args": ["C:/hyperion/dist/index.js"],
+      "env": {
+        "CHROME_CDP_PORT": "9222",
+        "CHROME_CDP_HOST": "127.0.0.1"
+      }
+    }
+  }
+}

@@ -1,0 +1,114 @@
+const http = require('http');
+const WebSocket = require('ws');
+const fs = require('fs');
+
+const COPY_FB = `🎉 ¡Sorteos 100% Transparentes y Verificados con IA!
+
+FairDraw utiliza Inteligencia Artificial para garantizar que cada sorteo sea provadamente justo y auditado. Sin trucos ni manipulaciones — solo confianza total. 🛡️
+
+🌐 fairdrawapp.com
+
+#FairDraw #Sorteos #InteligenciaArtificial #Transparencia #FairPlay #Tecnologia #Confianza #SorteosOnline #GanaPremios`;
+
+async function main() {
+  const tabs = await new Promise((res, rej) => {
+    http.get('http://127.0.0.1:9222/json', r => { let d=''; r.on('data',c=>d+=c); r.on('end',()=>res(JSON.parse(d))); }).on('error',rej);
+  });
+  const tab = tabs.find(t => t.type==='page' && t.url.includes('facebook.com'));
+  const ws = new WebSocket(tab.webSocketDebuggerUrl);
+  await new Promise(res => ws.on('open', res));
+
+  let cdpId = 1;
+  const cdpCall = (method, params = {}) => new Promise((resolve, reject) => {
+    const id = cdpId++;
+    const h = (data) => {
+      const r = JSON.parse(data);
+      if (r.id === id) { ws.off('message', h); r.error ? reject(new Error(JSON.stringify(r.error))) : resolve(r.result || {}); }
+    };
+    ws.on('message', h);
+    ws.send(JSON.stringify({ id, method, params }));
+  });
+
+  const mouseClick = async (x, y) => {
+    await cdpCall('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+    await new Promise(r => setTimeout(r, 80));
+    await cdpCall('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+    await new Promise(r => setTimeout(r, 80));
+    await cdpCall('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+  };
+
+  // Step 2 Next Click
+  console.log('Clicking Next on step 2...');
+  const nextBtn = await cdpCall('Runtime.evaluate', {
+    expression: `(() => {
+      const btns = Array.from(document.querySelectorAll('div[role="button"], button'));
+      const btn = btns.find(e => {
+        const txt = (e.textContent || '').trim().toLowerCase();
+        const r = e.getBoundingClientRect();
+        return (txt === 'siguiente' || txt === 'next') && r.width > 0;
+      });
+      if (btn) {
+        const r = btn.getBoundingClientRect();
+        return JSON.stringify({ x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) });
+      }
+      return null;
+    })()`, returnByValue: true
+  });
+
+  if (nextBtn.result?.value) {
+    const p = JSON.parse(nextBtn.result.value);
+    console.log(`Clicking Next at x=${p.x}, y=${p.y}...`);
+    await mouseClick(p.x, p.y);
+    await new Promise(r => setTimeout(r, 3000));
+  }
+
+  // Write Caption
+  console.log('Writing Spanish caption...');
+  await cdpCall('Runtime.evaluate', {
+    expression: `(() => {
+      const ed = document.querySelector('div[contenteditable="true"], textarea');
+      if (ed) {
+        ed.focus();
+        document.execCommand('selectAll', false, null);
+        document.execCommand('insertText', false, ${JSON.stringify(COPY_FB)});
+        ed.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      }
+      return false;
+    })()`
+  });
+  await new Promise(r => setTimeout(r, 2000));
+
+  // Click Publish / Post
+  console.log('Clicking Publish / Post...');
+  const pubBtn = await cdpCall('Runtime.evaluate', {
+    expression: `(() => {
+      const btns = Array.from(document.querySelectorAll('div[role="button"], button'));
+      const btn = btns.find(e => {
+        const txt = (e.textContent || '').trim().toLowerCase();
+        const r = e.getBoundingClientRect();
+        return (txt === 'publicar' || txt === 'publish' || txt === 'post') && r.width > 0;
+      });
+      if (btn) {
+        const r = btn.getBoundingClientRect();
+        return JSON.stringify({ x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) });
+      }
+      return null;
+    })()`, returnByValue: true
+  });
+
+  if (pubBtn.result?.value) {
+    const p = JSON.parse(pubBtn.result.value);
+    console.log(`Clicking Publish at x=${p.x}, y=${p.y}...`);
+    await mouseClick(p.x, p.y);
+    await new Promise(r => setTimeout(r, 10000));
+  }
+
+  const ss = await cdpCall('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync('C:\\Users\\erick\\.gemini\\antigravity-ide\\scratch\\hyperion-web-agent\\fb_published_final.png', Buffer.from(ss.data, 'base64'));
+  console.log('📸 Screenshot saved: fb_published_final.png');
+
+  ws.close();
+}
+
+main().catch(console.error);

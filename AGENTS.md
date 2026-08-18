@@ -1,111 +1,75 @@
-# Hyperion Browser - AI Agent Guide
+# AGENTS.md — Reglas Globales del Agente Antigravity
 
-## What is Hyperion?
+> Estas reglas aplican a TODAS las conversaciones y proyectos.
 
-Hyperion is a **universal MCP server** that lets any AI agent control a real Chrome browser.
-It is NOT a Cursor extension, NOT a VS Code plugin, NOT a Claude-only tool.
-Any agent that speaks MCP (Model Context Protocol) or CLI can use it.
+---
 
-## How Agents Can Use Hyperion
+## PROYECTO FAIRDRAW — REGLAS ABSOLUTAS
 
-### Cursor (VS Code)
-Add to `.cursor/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "hyperion": {
-      "command": "npx",
-      "args": ["hyperion-browser", "--mcp"]
-    }
-  }
-}
-```
+### Identidad del Proyecto
+- **Nombre:** FairDraw
+- **URL:** https://fairdrawapp.com (SOLO WEB — sin App Store / Google Play aun)
+- **Logo:** C:\FairDraw\fairdraw-social\assets\logos\logo_real.png
+- **Slogan:** "Giveaways you can trust"
+- **Prioridad de redes:** Instagram > TikTok > Facebook
 
-### Claude Code (CLI)
-```bash
-claude code --mcp-servers '{"hyperion": {"command": "hyperion", "args": ["--mcp"]}}'
-```
+### Reglas de Imagen/Contenido
+1. SIEMPRE pasar el logo como ImagePaths al generar imagenes — NUNCA describir el logo de memoria.
+2. El CTA es fairdrawapp.com — NUNCA mencionar App Store, Google Play ni "download".
+3. Formato de posts: vertical 9:16.
+4. Idioma principal de posts: ingles.
+5. Si el logo generado no es fiel -> usar Gemini Web para la generacion.
 
-### OpenCode
-Already using MCP-compatible tools. Add to `opencode.json` MCP servers.
+### Reglas de Publicacion en Redes
+- Scripts en: C:\hyperion\scripts\ (instagram/, tiktok/, facebook/)
+- Chrome CDP puerto 9222. Arrancar: C:\hyperion\launch-chrome-debug.bat
+- NO borrar posts automaticos del sistema de Facebook (updated profile picture)
 
-### Hermes Agent
-Configure as Browser SubAgent:
-```json
-{
-  "browser": {
-    "provider": "mcp",
-    "server": "hyperion",
-    "args": ["--mcp"]
-  }
-}
-```
+---
 
-### AGY
-Configure as Browser MCP Tool:
-```yaml
-mcp_servers:
-  hyperion:
-    command: hyperion
-    args: ["--mcp"]
-```
+## SISTEMA HYPERION — REGLAS DE AUTOMATIZACION WEB
 
-### Any MCP client
-```bash
-hyperion --mcp
-```
+### Ley Absoluta #1 — Capa Manus SIEMPRE primero
+Antes de hacer clic, escribir o inyectar archivos en el navegador:
+1. Inyectar la capa de overlay con badges numericos [1..N]
+2. Verificar banner: CAPA ACTIVA: [NOMBRE] [N ELEMENTOS]
+3. La capa debe tener bucle dinamico de repintado (250ms) — NUNCA estatica
 
-## Available Tools
+### Ley #2 — Scripts CDP
+- Usar siempre WebSocket sobre CDP (puerto 9222)
+- Preferir element.click() nativo DOM sobre coordenadas CDP fisicas
+- Para inputs de archivo: usar DOM.setFileInputFiles — NUNCA Input.dispatchMouseEvent
+- Esperar minimo 3-6 segundos despues de cada accion critica
 
-| Tool | Description |
-|------|-------------|
-| `browser_navigate` | Navigate to URL |
-| `browser_click` | Click element by CSS selector |
-| `browser_type` | Type text into element (human-like or fast) |
-| `browser_screenshot` | Screenshot (viewport, full-page, element) |
-| `browser_hover` | Hover over element |
-| `browser_scroll` | Scroll page or element |
-| `browser_select_option` | Select option in `<select>` |
-| `browser_upload_file` | Upload file via file input |
-| `browser_handle_dialog` | Handle alert/confirm/prompt |
-| `browser_evaluate` | Execute JavaScript |
-| `browser_get_text` | Get visible page text |
-| `browser_get_url` | Get current URL |
-| `browser_wait` | Wait fixed duration |
-| `browser_wait_for_selector` | Wait for element appearance |
+---
 
-## 3 Connection Modes
+## LECCIONES APRENDIDAS (Actualizado Agosto 2026)
 
-| Mode | Command | Use Case |
-|------|---------|----------|
-| Extension | `hyperion` (default) | Your real Chrome, no popups, CreepJS 0% |
-| Launch | `hyperion --launch` | CI, isolated testing |
-| Attach | `hyperion --attach ws://...` | Debugging, remote Chrome |
+### Generacion de imagenes y videos
+- CORRECTO: Pasar logo como ImagePaths mejora drasticamente la fidelidad
+- CORRECTO: Poner "no app store badges" y "ONE single logo only. NO double logo" en el prompt
+- CORRECTO: Especificar posicion exacta del logo ("large and centered in the upper half")
+- INCORRECTO: Describir el logo solo con texto genera logos genericos
+- CRITICO EN VIDEOS: Si las plantillas de diapositivas ya contienen el logo de FairDraw embebido, DESACTIVAR el overlay de watermark (`use_logo_watermark = False`) para evitar renderizar doble logo.
 
-## Anti-Detection
+### Publicacion en Facebook Reels
+- El flujo de publicacion en Reels consta de 3 etapas: `Subida -> Edit reel (Next) -> Reel settings (Post)`.
+- Si el boton "Post" aparece deshabilitado / en gris, Facebook EXIGE activar el toggle **"Add AI label"** para videos con elementos sinteticos.
+- En la barra inferior final: Boton izquierdo = "Save" / Guardar borrador (~x=143). Boton derecho = "Post" / Publicar (~x=315, boton azul). NUNCA hacer clic en Save por error.
+- Enviar siempre `Escape` doble tras ingresar el caption con hashtags para cerrar el dropdown de sugerencias que bloquea los botones de accion.
 
-Hyperion uses **native CDP overrides** — not JS patches — for anti-detection:
-- `Runtime.enable` OFF by default (eliminates runtime leak)
-- `Emulation.setAutomationOverride` for `navigator.webdriver=false` (undetectable)
-- Zero JS patches = zero fingerprints
-- Extension mode: CreepJS scores 0% bot, 0% headless
+### Automatizacion e Higiene de Procesos CDP
+- NUNCA usar browser subagents cuando ya existan scripts directos Node CDP sobre el puerto 9222.
+- Si una conexion CDP se queda colgada o en timeout, limpiar procesos Node huerfanos con `Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force` antes de reconectar.
+- Usar siempre IPv4 `127.0.0.1:9222` (NUNCA `localhost` en Windows).
 
-## Architecture
+### Borrado de posts en redes sociales
+- Posts automaticos de sistema en Facebook NO se pueden borrar (no tienen "Move to trash")
+- En TikTok, borrar videos requiere perfil logueado (no el publico)
+- En Instagram, verificar que la pestana este completamente cargada antes de ejecutar scripts
 
-```
-Agent (MCP client)
-  └── hyperion --mcp (MCP server)
-        └── Connection Manager
-              ├── Extension + Native Messaging (Modo 1)
-              ├── CDP Launch (Modo 2)
-              └── CDP Attach (Modo 3)
-                    └── Chrome DevTools Protocol
-                          └── Chrome REAL
-```
-
-## Security
-
-- URL blocklist for sensitive domains (banking, email, crypto)
-- Agent operates in background tabs (no focus stealing)
-- Tab isolation per session
-- No credentials stored server-side
+### Orden de trabajo segun Fabro
+1. Eliminar material sin calidad
+2. Actualizar perfiles con logo real
+3. Generar imagenes con subtitulos y locucion
+4. Publicar (prioridad Instagram)
