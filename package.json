@@ -1,15 +1,18 @@
 {
   "name": "hyperion-browser",
-  "version": "0.1.0",
-  "description": "Hyperion Browser - Universal MCP server for real Chrome browser automation. Works with Cursor, Claude Code, OpenCode, Hermes, AGY, and any MCP-compatible agent.",
+  "version": "0.2.0",
+  "description": "Hyperion V2 - Universal MCP server for real Chrome browser automation with real-time vision, resilient connections, and LLM-native actions. Works with Cursor, Claude Code, OpenCode, Hermes, and any MCP-compatible agent.",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
-    "hyperion": "dist/cli.js"
+    "hyperion": "dist/cli.js",
+    "hyperion-server": "dist/mcp/llm-server.js"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
+    "server": "ts-node src/mcp/llm-server.ts",
     "facebook": "node scripts/facebook-direct-composer-post.js",
     "facebook-step": "node scripts/facebook-step-by-step-layer.js",
     "facebook-next": "node scripts/facebook-click-photo-and-next.js",
@@ -46,11 +49,14 @@
     "overlay": "node scripts/inject-permanent-overlay.js",
     "test": "jest --config jest.config.js",
     "test:integration": "jest --config jest.config.js --testMatch '**/tests/integration/**/*.test.ts'",
+    "test:unit": "jest --config jest.config.js --testMatch '**/tests/unit/**/*.test.ts'",
     "lint": "eslint src/**/*.ts",
+    "format": "prettier --write 'src/**/*.ts'",
     "extension:install": "node dist/native-host/install.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "events": "^3.3.0",
     "jpeg-js": "^0.4.4",
     "pixelmatch": "^5.3.0",
     "pngjs": "^7.0.0",
@@ -65,11 +71,33 @@
     "@types/ws": "^8.5.10",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
+    "prettier": "^3.1.0",
     "ts-jest": "^29.1.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.3.0"
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "keywords": [
+    "browser-automation",
+    "chrome",
+    "mcp",
+    "llm",
+    "ai-agent",
+    "real-time-vision",
+    "web-scraping",
+    "anti-detection",
+    "cursor",
+    "claude"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ericklrm89-jpg/hyperion.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ericklrm89-jpg/hyperion/issues"
+  },
+  "author": "ericklrm89-jpg",
+  "license": "MIT"
 }
