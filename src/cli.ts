@@ -1,157 +1,243 @@
 #!/usr/bin/env node
-import { Hyperion } from './hyperion'
-import { MCPServer } from './tools/mcp-server'
-import { ConnectionMode } from './config'
+/**
+ * Hyperion V2 CLI Entry Point
+ * Supports multiple modes: MCP, CLI, Interactive
+ */
 
-async function main() {
-  const args = process.argv.slice(2)
+import { Hyperion } from './hyperion';
+import { LLMServer } from './mcp/LLMServer';
+import { MCPServerAdapter } from './mcp/MCPServerAdapter';
+import { ConnectionMode } from './config';
 
-  const config: any = {}
+interface CLIArgs {
+  mode: ConnectionMode;
+  mcpMode: boolean;
+  debugPort?: number;
+  chromePath?: string;
+  chromeProfile?: string;
+  websocketUrl?: string;
+  verbose?: boolean;
+}
 
-  // Parse arguments
+/**
+ * Parse CLI arguments
+ */
+function parseArgs(): CLIArgs {
+  const args = process.argv.slice(2);
+  const config: any = {
+    mode: 'extension' as ConnectionMode,
+    mcpMode: false,
+  };
+
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case '--launch':
-        config.mode = 'launch' as ConnectionMode
-        break
-      case '--attach':
-        config.mode = 'attach' as ConnectionMode
-        config.websocketUrl = args[++i]
-        break
-      case '--extension':
-        config.mode = 'extension' as ConnectionMode
-        break
       case '--mcp':
-        config.mcpStdio = true
-        break
+        config.mcpMode = true;
+        break;
+      case '--launch':
+        config.mode = 'launch';
+        break;
+      case '--attach':
+        config.mode = 'attach';
+        config.websocketUrl = args[++i];
+        break;
+      case '--extension':
+        config.mode = 'extension';
+        break;
       case '--port':
-        config.debugPort = parseInt(args[++i])
-        break
+        config.debugPort = parseInt(args[++i]);
+        break;
       case '--profile':
-        config.chromeProfile = args[++i]
-        break
+        config.chromeProfile = args[++i];
+        break;
+      case '--chrome':
+        config.chromePath = args[++i];
+        break;
       case '--verbose':
-        config.verbose = true
-        break
+        config.verbose = true;
+        break;
       case '--help':
-        showHelp()
-        return
+        showHelp();
+        process.exit(0);
     }
   }
 
-  const hyperion = new Hyperion(config)
-
-  try {
-    await hyperion.connect()
-
-    if (config.mcpStdio || args.includes('--mcp')) {
-      // MCP mode: listen on stdio
-      const mcpServer = new MCPServer(hyperion)
-      await mcpServer.start()
-      console.error('Hyperion MCP server started on stdio')
-    } else {
-      // CLI mode: execute commands
-      await handleCLI(hyperion, args)
-    }
-
-    // Keep alive for MCP mode
-    if (config.mcpStdio || args.includes('--mcp')) {
-      process.on('SIGINT', async () => {
-        await hyperion.disconnect()
-        process.exit(0)
-      })
-      // Don't exit
-      await new Promise(() => {})
-    } else {
-      await hyperion.disconnect()
-    }
-  } catch (err: any) {
-    console.error('Hyperion error:', err.message)
-    process.exit(1)
-  }
+  return config;
 }
 
-async function handleCLI(hyperion: Hyperion, args: string[]): Promise<void> {
-  if (args.length === 0) {
-    // Default: start interactive
-    console.log('Hyperion Browser - Connected')
-    console.log('Available commands: navigate, click, type, screenshot, eval, text, url, scroll')
-    console.log('Example: navigate https://example.com')
-    return
-  }
-
-  const cmd = args[0]
-  const rest = args.slice(1)
-
-  switch (cmd) {
-    case 'navigate':
-      await hyperion.navigate.navigate({ url: rest[0] })
-      console.log(`Navigated to ${rest[0]}`)
-      break
-    case 'click':
-      await hyperion.click.click(rest[0])
-      console.log(`Clicked ${rest[0]}`)
-      break
-    case 'type':
-      await hyperion.type.type(rest[0], rest.slice(1).join(' '))
-      console.log(`Typed into ${rest[0]}`)
-      break
-    case 'screenshot': {
-      const buf = await hyperion.screenshot.capture({ mode: (rest[0] as any) || 'viewport' })
-      const fs = await import('fs')
-      const filename = `screenshot-${Date.now()}.png`
-      fs.writeFileSync(filename, buf)
-      console.log(`Screenshot saved: ${filename} (${buf.length} bytes)`)
-      break
-    }
-    case 'eval':
-      console.log(await hyperion.eval(rest.join(' ')))
-      break
-    case 'text':
-      console.log(await hyperion.getPageText())
-      break
-    case 'url':
-      console.log(await hyperion.getPageURL())
-      break
-    case 'scroll':
-      await hyperion.scroll.scroll({ deltaY: parseInt(rest[0]) || 500 })
-      console.log('Scrolled')
-      break
-    default:
-      console.log(`Unknown command: ${cmd}`)
-      showHelp()
-  }
-}
-
+/**
+ * Show help message
+ */
 function showHelp(): void {
   console.log(`
-Hyperion Browser - Chrome automation for AI agents
+Hyperion V2 - LLM-Native Browser Automation
 
 USAGE:
-  hyperion [--mcp] [--launch | --attach <url> | --extension]
+  hyperion [options] [mode]
 
 MODES:
-  --mcp          Run as MCP server (for Cursor, Claude Code, OpenCode, etc.)
-  --launch       Launch a fresh Chrome instance
-  --attach <url> Attach to existing Chrome via WebSocket URL
-  --extension    Connect via Chrome Extension + Native Messaging (default)
+  --mcp              Run as MCP server (for Claude, Cursor, etc.)
+  --launch           Launch fresh Chrome instance
+  --attach <url>     Attach to existing Chrome (via WebSocket URL)
+  --extension        Connect via Chrome Extension (default)
 
-CLI COMMANDS:
-  navigate <url>    Navigate to URL
-  click <selector>  Click an element
-  type <sel> <txt>  Type text into an element
-  screenshot [mode] Take screenshot (viewport, fullPage, element)
-  eval <js>         Execute JavaScript
-  text              Get page text
-  url               Get current URL
-  scroll [pixels]   Scroll page
+OPTIONS:
+  --port <num>       Debug port for launched Chrome
+  --profile <path>   Chrome user data directory
+  --chrome <path>    Path to Chrome executable
+  --verbose          Verbose logging
+  --help             Show this help
 
 EXAMPLES:
-  hyperion --mcp                           # Start MCP server
-  hyperion navigate https://example.com    # CLI navigation
-  hyperion --launch click "#submit"        # Launch + click
-  hyperion --attach ws://localhost:9222/... # Attach to running Chrome
-`)
+  # Run as MCP server
+  hyperion --mcp
+
+  # Launch fresh Chrome and run MCP
+  hyperion --mcp --launch --port 9222
+
+  # Attach to existing Chrome
+  hyperion --mcp --attach ws://localhost:9222/devtools/page/xxx
+
+  # Run with extension (default)
+  hyperion --mcp --extension
+  `);
 }
 
-main().catch(console.error)
+/**
+ * Main entry point
+ */
+async function main() {
+  const cliArgs = parseArgs();
+
+  try {
+    // Create Hyperion instance
+    const hyperion = new Hyperion({
+      mode: cliArgs.mode,
+      debugPort: cliArgs.debugPort,
+      chromePath: cliArgs.chromePath,
+      chromeProfile: cliArgs.chromeProfile,
+      websocketUrl: cliArgs.websocketUrl,
+      verbose: cliArgs.verbose,
+    });
+
+    console.log(`[Hyperion V2] Connecting (mode: ${cliArgs.mode})...`);
+    await hyperion.connect();
+    console.log('[Hyperion V2] Connected');
+
+    if (cliArgs.mcpMode) {
+      // MCP Server mode
+      const llmServer = new LLMServer(hyperion);
+      const mcpAdapter = new MCPServerAdapter(llmServer);
+      await mcpAdapter.start();
+      console.log('[Hyperion V2] MCP Server started on stdio');
+
+      // Keep alive
+      process.on('SIGINT', async () => {
+        console.log('[Hyperion V2] Shutting down...');
+        await mcpAdapter.stop();
+        await hyperion.disconnect();
+        process.exit(0);
+      });
+
+      // Don't exit
+      await new Promise(() => {});
+    } else {
+      // Interactive CLI mode
+      console.log('[Hyperion V2] Connected. Ready for commands.');
+      console.log('Commands: navigate, click, type, screenshot, eval, text, url, scroll');
+      console.log('Type exit to quit\n');
+
+      const readline = require('readline');
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      const prompt = () => {
+        rl.question('> ', async (input: string) => {
+          if (input === 'exit') {
+            rl.close();
+            await hyperion.disconnect();
+            process.exit(0);
+          }
+
+          try {
+            const [cmd, ...rest] = input.split(' ');
+            await handleCLICommand(hyperion, cmd, rest);
+          } catch (err: any) {
+            console.error('Error:', err.message);
+          }
+
+          prompt();
+        });
+      };
+
+      prompt();
+    }
+  } catch (err: any) {
+    console.error('[Hyperion V2] Fatal error:', err.message);
+    if (process.env.VERBOSE) console.error(err.stack);
+    process.exit(1);
+  }
+}
+
+/**
+ * Handle CLI commands
+ */
+async function handleCLICommand(
+  hyperion: Hyperion,
+  cmd: string,
+  args: string[]
+): Promise<void> {
+  switch (cmd) {
+    case 'navigate':
+      await hyperion.navigate.navigate({ url: args[0] });
+      console.log(`Navigated to ${args[0]}`);
+      break;
+
+    case 'click':
+      await hyperion.click.click(args[0]);
+      console.log(`Clicked ${args[0]}`);
+      break;
+
+    case 'type':
+      await hyperion.type.type(args[0], args.slice(1).join(' '));
+      console.log(`Typed into ${args[0]}`);
+      break;
+
+    case 'screenshot': {
+      const buf = await hyperion.screenshot.capture({
+        mode: (args[0] as any) || 'viewport',
+      });
+      const fs = await import('fs');
+      const filename = `screenshot-${Date.now()}.png`;
+      fs.writeFileSync(filename, buf);
+      console.log(`Screenshot saved: ${filename} (${buf.length} bytes)`);
+      break;
+    }
+
+    case 'eval':
+      console.log(await hyperion.eval(args.join(' ')));
+      break;
+
+    case 'text':
+      console.log(await hyperion.getPageText());
+      break;
+
+    case 'url':
+      console.log(await hyperion.getPageURL());
+      break;
+
+    case 'scroll':
+      await hyperion.scroll.scroll({ deltaY: parseInt(args[0]) || 500 });
+      console.log('Scrolled');
+      break;
+
+    default:
+      console.log(`Unknown command: ${cmd}`);
+      console.log('Available: navigate, click, type, screenshot, eval, text, url, scroll');
+  }
+}
+
+// Run
+main().catch(console.error);
