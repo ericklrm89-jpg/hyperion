@@ -20,6 +20,8 @@ export * from './connection/resilience/HeartbeatManager';
 export * from './connection/resilience/ReconnectionManager';
 export * from './connection/resilience/ConnectionPool';
 export * from './connection/resilience/ConnectionHealthCheck';
+export * from './connection/resilience/PortSessionManager';
+export * from './connection/resilience/ProfileScanner';
 
 // Vision Engine
 export * from './vision/VisionEngine';

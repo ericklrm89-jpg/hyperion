@@ -16,6 +16,8 @@ export * from './connection/resilience/HeartbeatManager';
 export * from './connection/resilience/ReconnectionManager';
 export * from './connection/resilience/ConnectionPool';
 export * from './connection/resilience/ConnectionHealthCheck';
+export * from './connection/resilience/PortSessionManager';
+export * from './connection/resilience/ProfileScanner';
 export * from './vision/VisionEngine';
 export * from './tools/facebook/postToFacebook';
 export * from './tools/instagram/postToInstagram';

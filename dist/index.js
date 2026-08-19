@@ -38,6 +38,8 @@ __exportStar(require("./connection/resilience/HeartbeatManager"), exports);
 __exportStar(require("./connection/resilience/ReconnectionManager"), exports);
 __exportStar(require("./connection/resilience/ConnectionPool"), exports);
 __exportStar(require("./connection/resilience/ConnectionHealthCheck"), exports);
+__exportStar(require("./connection/resilience/PortSessionManager"), exports);
+__exportStar(require("./connection/resilience/ProfileScanner"), exports);
 // Vision Engine
 __exportStar(require("./vision/VisionEngine"), exports);
 // Tools & Integrations
