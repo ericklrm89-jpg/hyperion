@@ -43,6 +43,8 @@ __exportStar(require("./vision/VisionEngine"), exports);
 // Tools & Integrations
 __exportStar(require("./tools/facebook/postToFacebook"), exports);
 __exportStar(require("./tools/instagram/postToInstagram"), exports);
+__exportStar(require("./tools/tiktok/postToTikTok"), exports);
+__exportStar(require("./tools/gemini/promptGemini"), exports);
 __exportStar(require("./tools/gmail/sendGmail"), exports);
 __exportStar(require("./tools/whatsapp/sendWhatsApp"), exports);
 // Overlay System

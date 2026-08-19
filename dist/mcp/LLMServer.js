@@ -7,6 +7,8 @@ const VisionEngine_1 = require("../vision/VisionEngine");
 const OverlayEngine_1 = require("../overlay/OverlayEngine");
 const postToFacebook_1 = require("../tools/facebook/postToFacebook");
 const postToInstagram_1 = require("../tools/instagram/postToInstagram");
+const postToTikTok_1 = require("../tools/tiktok/postToTikTok");
+const promptGemini_1 = require("../tools/gemini/promptGemini");
 const sendGmail_1 = require("../tools/gmail/sendGmail");
 const sendWhatsApp_1 = require("../tools/whatsapp/sendWhatsApp");
 /**
@@ -221,6 +223,8 @@ class LLMServer {
         // FACEBOOK POST
         this.registry.register(postToFacebook_1.postToFacebookAction);
         this.registry.register(postToInstagram_1.postToInstagramAction);
+        this.registry.register(postToTikTok_1.postToTikTokAction);
+        this.registry.register(promptGemini_1.promptGeminiAction);
         this.registry.register(sendGmail_1.sendGmailAction);
         this.registry.register(sendWhatsApp_1.sendWhatsAppAction);
     }
@@ -369,6 +373,12 @@ class LLMServer {
                 }
                 case 'instagram-post': {
                     return (0, postToInstagram_1.executePostToInstagram)(this.hyperion.cxn, validated);
+                }
+                case 'tiktok-post': {
+                    return (0, postToTikTok_1.executePostToTikTok)(this.hyperion.cxn, validated);
+                }
+                case 'gemini-prompt': {
+                    return (0, promptGemini_1.executePromptGemini)(this.hyperion.cxn, validated);
                 }
                 case 'gmail-send': {
                     return (0, sendGmail_1.executeSendGmail)(this.hyperion.cxn, validated);

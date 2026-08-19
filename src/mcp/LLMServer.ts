@@ -6,6 +6,8 @@ import { OverlayEngine } from '../overlay/OverlayEngine';
 import { ActionDefinition } from '../core/types';
 import { postToFacebookAction, executePostToFacebook } from '../tools/facebook/postToFacebook';
 import { postToInstagramAction, executePostToInstagram } from '../tools/instagram/postToInstagram';
+import { postToTikTokAction, executePostToTikTok } from '../tools/tiktok/postToTikTok';
+import { promptGeminiAction, executePromptGemini } from '../tools/gemini/promptGemini';
 import { sendGmailAction, executeSendGmail } from '../tools/gmail/sendGmail';
 import { sendWhatsAppAction, executeSendWhatsApp } from '../tools/whatsapp/sendWhatsApp';
 
@@ -255,6 +257,8 @@ export class LLMServer {
     // FACEBOOK POST
     this.registry.register(postToFacebookAction);
     this.registry.register(postToInstagramAction);
+    this.registry.register(postToTikTokAction);
+    this.registry.register(promptGeminiAction);
     this.registry.register(sendGmailAction);
     this.registry.register(sendWhatsAppAction);
   }
@@ -420,6 +424,14 @@ export class LLMServer {
 
         case 'instagram-post': {
           return executePostToInstagram(this.hyperion.cxn, validated);
+        }
+
+        case 'tiktok-post': {
+          return executePostToTikTok(this.hyperion.cxn, validated);
+        }
+
+        case 'gemini-prompt': {
+          return executePromptGemini(this.hyperion.cxn, validated);
         }
 
         case 'gmail-send': {
