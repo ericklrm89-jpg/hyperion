@@ -1,9 +1,10 @@
 /**
  * HYPERION INTERACTIVE PROFILE & MULTI-PORT SESSION MANAGER
- * Prevents profile cross-talk, detects busy ports (9222..9230), and isolates instances per project.
+ * Persistent Supervisor Dashboard with Live CDP Port Tracking for AI Agents
  */
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const { spawn, execSync } = require('child_process');
 const readline = require('readline');
 const { scanAllProfiles } = require('./profile_scanner');
@@ -38,18 +39,75 @@ function cleanProfileLocks(userDataDir) {
   }
 }
 
+function queryCdpTabs(port) {
+  return new Promise((resolve) => {
+    http.get(`http://127.0.0.1:${port}/json/list`, { timeout: 1500 }, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => {
+        try {
+          const list = JSON.parse(d).filter(x => x.type === 'page');
+          resolve(list);
+        } catch {
+          resolve([]);
+        }
+      });
+    }).on('error', () => resolve([]));
+  });
+}
+
+function drawPersistentDashboard(selected, port, tabs = []) {
+  console.clear();
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════════╗');
+  console.log('║               ⚡ HYPERION CDP SUPERVISOR — SESIÓN DE NAVEGADOR ACTIVA             ║');
+  console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
+  console.log('║                                                                                   ║');
+  console.log(`║   👉 PUERTO CDP PARA OTRAS IAs  : \x1b[1;32m${port}\x1b[0m                                             ║`);
+  console.log(`║   👉 URL DE CONEXIÓN LOCAL      : \x1b[1;36mhttp://127.0.0.1:${port}\x1b[0m                                ║`);
+  console.log(`║   👉 WEBSOCKET DEBUGGER URL     : \x1b[1;33mws://127.0.0.1:${port}\x1b[0m                                  ║`);
+  console.log('║                                                                                   ║');
+  console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
+  console.log(`║   • Navegador Activo   : ${selected.browser.padEnd(56)} ║`);
+  console.log(`║   • Perfil en Uso      : ${(selected.name + ' (' + (selected.userName || selected.profileDir) + ')').padEnd(56)} ║`);
+  console.log(`║   • Directorio Perfil  : ${selected.profileDir.padEnd(56)} ║`);
+  console.log(`║   • Pestañas Abiertas  : ${tabs.length.toString().padEnd(56)} ║`);
+  console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
+  console.log('║   📋 PESTAÑAS DETECTADAS EN VIVO:                                                 ║');
+  
+  if (tabs.length === 0) {
+    console.log('║      (Iniciando navegador... esperando páginas)                                   ║');
+  } else {
+    tabs.slice(0, 6).forEach((t, i) => {
+      const title = (t.title || t.url || 'Sin título').slice(0, 70);
+      console.log(`║      [${i + 1}] ${title.padEnd(73)} ║`);
+    });
+    if (tabs.length > 6) {
+      console.log(`║      ... y ${tabs.length - 6} pestañas más                                                    ║`);
+    }
+  }
+
+  console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
+  console.log('║   ℹ️  ESTA VENTANA ES PERSISTENTE. MANTENLA ABIERTA PARA QUE LAS IAs CONTROLEN    ║');
+  console.log('║       EL NAVEGADOR.                                                               ║');
+  console.log('║                                                                                   ║');
+  console.log('║   [q + Enter] Salir y liberar puerto | [r + Enter] Refrescar | [Ctrl+C] Cerrar     ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════════╝\n');
+}
+
 async function main() {
   console.clear();
-  console.log('╔═══════════════════════════════════════════════════════════════════════════════╗');
-  console.log('║        HYPERION BROWSER — GESTOR DE INSTANCIAS Y PERFILES MULTI-PUERTO        ║');
-  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝\n');
+  console.log('╔═══════════════════════════════════════════════════════════════════════════════════╗');
+  console.log('║        HYPERION BROWSER — GESTOR DE INSTANCIAS Y PERFILES MULTI-PUERTO            ║');
+  console.log('╚═══════════════════════════════════════════════════════════════════════════════════╝\n');
 
-  console.log('🔍 Escaneando navegadores, perfiles y puertos CDP activos (9222..9230)...\n');
+  console.log('🔍 Escaneando navegadores, perfiles y puertos CDP activos (9222..9240)...\n');
   const profiles = scanAllProfiles();
   const activeSessions = await PortSessionManager.getActiveSessions();
 
   if (profiles.length === 0) {
     console.error('❌ No se encontraron navegadores instalados en este equipo.');
+    console.log('\nPresiona cualquier tecla para salir...');
+    process.stdin.read();
     process.exit(1);
   }
 
@@ -113,9 +171,9 @@ async function main() {
   let targetPort = 9222;
 
   if (activeMatch) {
-    console.log(`\n⚠️  ATENCIÓN: El perfil "${selected.name}" YA ESTÁ ACTIVO y controlado en el puerto ${activeMatch.port}.`);
-    console.log('   [1] Conectar y reutilizar la sesión existente en el puerto ' + activeMatch.port + ' (Recomendado)');
-    console.log('   [2] Reiniciar el navegador forzando el cierre de la sesión previa');
+    console.log(`\n⚠️  ATENCIÓN: El perfil "${selected.name}" YA ESTÁ ACTIVO en el puerto ${activeMatch.port}.`);
+    console.log('   [1] Conectar y supervisar la sesión existente (Puerto ' + activeMatch.port + ')');
+    console.log('   [2] Reiniciar navegador forzando el cierre previo');
     
     const choice = (await question('   Elige opción [1 o 2] (Enter para 1): ')).trim();
     if (choice === '2') {
@@ -127,66 +185,92 @@ async function main() {
       await PortSessionManager.releaseSession(activeMatch.port);
       targetPort = activeMatch.port;
     } else {
-      console.log(`\n✅ Conectado a la instancia existente en http://127.0.0.1:${activeMatch.port}`);
-      rl.close();
-      await new Promise(r => setTimeout(r, 1500));
-      return;
+      targetPort = activeMatch.port;
     }
   } else {
     // Determine available port
     targetPort = await PortSessionManager.findNextAvailablePort(9222, 9240);
   }
 
-  rl.close();
+  if (!activeMatch || choice === '2') {
+    console.log(`\n🚀 Iniciando ${selected.browser} con CDP en Puerto: ${targetPort}...`);
+    saveLastProfile(selected);
 
-  console.log(`\n🚀 Asignando Puerto CDP: ${targetPort} para el perfil "${selected.name}"...`);
-  saveLastProfile(selected);
+    // 1. Limpiar bloqueos de perfil
+    cleanProfileLocks(selected.userDataDir);
 
-  // 1. Limpiar bloqueos de perfil
-  cleanProfileLocks(selected.userDataDir);
+    // 2. Iniciar el navegador con CDP en el puerto asignado
+    const args = [
+      `--remote-debugging-port=${targetPort}`,
+      `--user-data-dir=${selected.userDataDir}`,
+      `--profile-directory=${selected.profileDir}`,
+      '--no-first-run',
+      '--restore-last-session',
+      'https://mail.google.com',
+      'https://web.whatsapp.com',
+      'https://www.instagram.com',
+      'https://www.facebook.com'
+    ];
 
-  // 2. Iniciar el navegador con CDP en el puerto asignado
-  const args = [
-    `--remote-debugging-port=${targetPort}`,
-    `--user-data-dir=${selected.userDataDir}`,
-    `--profile-directory=${selected.profileDir}`,
-    '--no-first-run',
-    '--restore-last-session',
-    'https://mail.google.com',
-    'https://web.whatsapp.com',
-    'https://www.instagram.com',
-    'https://www.facebook.com'
-  ];
+    const child = spawn(selected.exe, args, {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
 
-  const child = spawn(selected.exe, args, {
-    detached: true,
-    stdio: 'ignore',
-  });
-  child.unref();
+    // 3. Registrar sesión activa
+    await PortSessionManager.registerSession({
+      port: targetPort,
+      browser: selected.browser,
+      profileDir: selected.profileDir,
+      profileName: selected.name,
+      userDataDir: selected.userDataDir,
+      pid: child.pid,
+      startedAt: new Date().toISOString(),
+      wsUrl: `ws://127.0.0.1:${targetPort}`
+    });
+  }
 
-  // 3. Registrar sesión activa
-  await PortSessionManager.registerSession({
-    port: targetPort,
-    browser: selected.browser,
-    profileDir: selected.profileDir,
-    profileName: selected.name,
-    userDataDir: selected.userDataDir,
-    pid: child.pid,
-    startedAt: new Date().toISOString(),
-    wsUrl: `ws://127.0.0.1:${targetPort}`
-  });
-
-  console.log('\n╔═══════════════════════════════════════════════════════════════════════════════╗');
-  console.log(`║   ✅ NAVEGADOR INICIADO CORRECTAMENTE EN EL PUERTO CDP ${targetPort}                     ║`);
-  console.log(`║   • Perfil Activo : ${selected.name.padEnd(56)} ║`);
-  console.log(`║   • Cuenta Email  : ${(selected.userName || 'N/A').padEnd(56)} ║`);
-  console.log(`║   • Endpoint CDP  : http://127.0.0.1:${targetPort.toString().padEnd(49)} ║`);
-  console.log('╚═══════════════════════════════════════════════════════════════════════════════╝\n');
-
+  // Esperar a que el puerto responda
   await new Promise(r => setTimeout(r, 2000));
+  let initialTabs = await queryCdpTabs(targetPort);
+
+  // DIBUJAR DASHBOARD PERSISTENTE
+  drawPersistentDashboard(selected, targetPort, initialTabs);
+
+  // Monitor continuo cada 5 segundos
+  const monitorInterval = setInterval(async () => {
+    const tabs = await queryCdpTabs(targetPort);
+    drawPersistentDashboard(selected, targetPort, tabs);
+  }, 5000);
+
+  // Manejo de comandos interactivos en la ventana persistente
+  rl.on('line', async (line) => {
+    const cmd = line.trim().toLowerCase();
+    if (cmd === 'q') {
+      console.log('\n🛑 Cerrando sesión y liberando puerto ' + targetPort + '...');
+      clearInterval(monitorInterval);
+      await PortSessionManager.releaseSession(targetPort);
+      rl.close();
+      process.exit(0);
+    } else if (cmd === 'r') {
+      const tabs = await queryCdpTabs(targetPort);
+      drawPersistentDashboard(selected, targetPort, tabs);
+    }
+  });
+
+  // Limpieza al recibir SIGINT (Ctrl + C)
+  process.on('SIGINT', async () => {
+    console.log('\n🛑 Interrupción recibida. Liberando sesión...');
+    clearInterval(monitorInterval);
+    await PortSessionManager.releaseSession(targetPort);
+    process.exit(0);
+  });
 }
 
 main().catch(err => {
-  console.error('❌ Error gestionando perfiles:', err);
-  process.exit(1);
+  console.error('❌ Error en lanzador interactivo:', err);
+  console.log('\nPresiona Enter para cerrar...');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl.question('', () => process.exit(1));
 });

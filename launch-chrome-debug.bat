@@ -4,5 +4,7 @@ node "%~dp0scripts\launch_interactive_profile.js"
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [Hyperion] Error al ejecutar el selector de perfiles.
-    pause
 )
+echo.
+echo [Hyperion] Sesion finalizada.
+pause
