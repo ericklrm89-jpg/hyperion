@@ -42,6 +42,7 @@ __exportStar(require("./connection/resilience/ConnectionHealthCheck"), exports);
 __exportStar(require("./vision/VisionEngine"), exports);
 // Tools & Integrations
 __exportStar(require("./tools/facebook/postToFacebook"), exports);
+__exportStar(require("./tools/instagram/postToInstagram"), exports);
 __exportStar(require("./tools/gmail/sendGmail"), exports);
 __exportStar(require("./tools/whatsapp/sendWhatsApp"), exports);
 // Overlay System

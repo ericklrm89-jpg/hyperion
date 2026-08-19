@@ -3,6 +3,11 @@ import { OverlayData, OverlayConfig, OverlayElement } from './types'
 import { LayerDetector } from './detector'
 import { logger } from '../core/logger'
 
+/**
+ * OverlayPrimitive (Capa Manus Singleton)
+ * Guarantees STRICTLY ONE SINGLE OVERLAY instance in the browser at all times.
+ * Automatically destroys any previous layers before starting.
+ */
 export class OverlayPrimitive {
   private cxn: ConnectionManager
   private detector: LayerDetector
@@ -22,25 +27,26 @@ export class OverlayPrimitive {
   async inject(config?: OverlayConfig): Promise<void> {
     const cfg = { ...this.defaultConfig, ...config }
 
-    // Step 1: Cleanly kill any existing overlay without touching web page timers
-    await this.kill(true)
+    // Atomic pre-cleanup to prevent overlay-on-overlay stacking
+    await this.kill(false)
 
-    // Step 2: Build and inject the isolated overlay JS
     const js = this.buildOverlayJS(cfg)
     await this.cxn.evaluate(js)
 
-    // Step 3: Verify it's running
     const check = await this.cxn.evaluate('typeof window.__hyData === "function"')
     if (!check?.value) throw new Error('Overlay injection failed')
     this.injected = true
 
-    logger.info('[Overlay/Manus] Capa Manus multicolor integral inyectada y activa con bucle dinámico (250ms)');
+    logger.info('[Overlay/Manus] Capa Manus multicolor singleton inyectada (0 capas duplicadas)');
   }
 
   async kill(keepStyles = false): Promise<void> {
     await this.cxn.evaluate(`
       (function(){
         try {
+          if (window.__HY_MANUS_SINGLETON && typeof window.__HY_MANUS_SINGLETON.destroy === 'function') {
+            window.__HY_MANUS_SINGLETON.destroy();
+          }
           if (window.__HY_INTERVALS && Array.isArray(window.__HY_INTERVALS)) {
             window.__HY_INTERVALS.forEach(function(id){ clearInterval(id); clearTimeout(id); });
             window.__HY_INTERVALS = [];
@@ -49,12 +55,16 @@ export class OverlayPrimitive {
             window.__HY_OBSERVERS.forEach(function(obs){ obs.disconnect(); });
             window.__HY_OBSERVERS = [];
           }
-          var root = document.getElementById('__hyperion_overlay_root');
-          if (root) root.remove();
-          document.querySelectorAll('.hy-el, .hy-tp').forEach(function(e){ e.remove(); });
+          document.querySelectorAll('#__hyperion_overlay_root, #__hyperion_overlay_container, [id^="__hyperion_overlay"], .hy-el, .hy-tp, .hy-overlay-rect').forEach(function(e){ e.remove(); });
           if (!${keepStyles}) {
-            document.querySelectorAll('.hy-st').forEach(function(e){ e.remove(); });
+            document.querySelectorAll('.hy-st, #__hyperion_overlay_styles').forEach(function(e){ e.remove(); });
           }
+          delete window.__HY_MANUS_SINGLETON;
+          delete window.__hyData;
+          delete window.__HY_GET_OVERLAY;
+          delete window.__HY_CLICK_OVERLAY;
+          delete window.__HY_OVERLAY_READY;
+          delete window.__HY_OVERLAY_CACHE;
           window.__HY_KILL = true;
         } catch(e){}
       })()
@@ -64,16 +74,7 @@ export class OverlayPrimitive {
   }
 
   async ensureClean(): Promise<void> {
-    const check = await this.cxn.evaluate(`
-      (function(){
-        var hasOverlay = !!document.getElementById('__hyperion_overlay_root') || !!document.querySelector('.hy-el');
-        var hasDataFn = typeof window.__hyData === 'function';
-        return hasOverlay || hasDataFn;
-      })()
-    `)
-    if (check?.value) {
-      await this.kill()
-    }
+    await this.kill()
   }
 
   async getData(): Promise<OverlayData> {
@@ -156,36 +157,41 @@ export class OverlayPrimitive {
 
     return `
 (function(){
-  window.__HY_KILL = false;
-  window.__HY_INTERVALS = window.__HY_INTERVALS || [];
-  window.__HY_OBSERVERS = window.__HY_OBSERVERS || [];
+  // 1. Teardown any previous singleton to prevent layered stacking
+  if (window.__HY_MANUS_SINGLETON && typeof window.__HY_MANUS_SINGLETON.destroy === 'function') {
+    try { window.__HY_MANUS_SINGLETON.destroy(); } catch(e){}
+  }
 
-  if(!document.querySelector('.hy-st')){
-    var s=document.createElement('style');s.className='hy-st';
-    s.textContent='#__hyperion_overlay_root{position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:${z};overflow:hidden;}' +
+  document.querySelectorAll('#__hyperion_overlay_root, #__hyperion_overlay_container, [id^="__hyperion_overlay"], .hy-el, .hy-overlay-rect').forEach(function(e){ e.remove(); });
+
+  if(!document.getElementById('__hyperion_overlay_styles')){
+    var s = document.createElement('style');
+    s.id = '__hyperion_overlay_styles';
+    s.textContent = '#__hyperion_overlay_root{position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:${z};overflow:hidden;}' +
       '.hy-el{position:fixed;pointer-events:none;z-index:${z};overflow:hidden;font:bold 11px/13px monospace;color:#fff;text-shadow:0 0 3px #000;box-sizing:border-box;border:2px solid;border-radius:3px;}' +
       '.hy-badge{position:absolute;top:0;left:0;padding:1px 4px;font-weight:bold;font-size:10px;line-height:12px;border-radius:0 0 3px 0;z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.6);}' +
       '.hy-badge-banner{position:fixed;top:4px;left:4px;background:rgba(0,0,0,0.9);color:#00ff66;border:1px solid #00ff66;padding:3px 8px;border-radius:4px;font:bold 12px monospace;z-index:${z};pointer-events:none;}';
     document.head.appendChild(s);
   }
 
-  var COLORS=[${colorsStr}];
+  var COLORS = [${colorsStr}];
+  var isRendering = false;
 
   function inViewport(r){
-    return r.left<window.innerWidth && r.right>0 && r.top<window.innerHeight && r.bottom>0;
+    return r.left < window.innerWidth && r.right > 0 && r.top < window.innerHeight && r.bottom > 0;
   }
 
   function isInteractive(el){
     if(!el || el.id === '__hyperion_overlay_root' || el.classList.contains('hy-el')) return false;
-    if(el.offsetWidth===0 || el.offsetHeight===0) return false;
-    if(el.tagName==='SVG' || el.tagName==='PATH' || el.tagName==='G') return false;
+    if(el.offsetWidth === 0 || el.offsetHeight === 0) return false;
+    if(el.tagName === 'SVG' || el.tagName === 'PATH' || el.tagName === 'G') return false;
 
     var tag = el.tagName;
-    if(tag==='BUTTON' || tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT' || tag==='A') return true;
-    if(el.isContentEditable || el.getAttribute('contenteditable')==='true' || el.getAttribute('role')==='textbox') return true;
+    if(tag === 'BUTTON' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'A') return true;
+    if(el.isContentEditable || el.getAttribute('contenteditable') === 'true' || el.getAttribute('role') === 'textbox') return true;
     
     var role = el.getAttribute('role');
-    if(role==='button' || role==='tab' || role==='menuitem' || role==='listitem' || role==='row' || role==='option' || role==='switch' || role==='checkbox' || role==='link') return true;
+    if(role === 'button' || role === 'tab' || role === 'menuitem' || role === 'listitem' || role === 'row' || role === 'option' || role === 'switch' || role === 'checkbox' || role === 'link') return true;
 
     if(el.hasAttribute('onclick') || el.hasAttribute('data-icon') || el.hasAttribute('data-tab') || el.hasAttribute('data-testid')) return true;
 
@@ -200,29 +206,28 @@ export class OverlayPrimitive {
     var all = document.querySelectorAll('*');
     var rawList = [];
 
-    for(var i=0;i<all.length;i++){
+    for(var i = 0; i < all.length; i++){
       try{
-        var el=all[i];
+        var el = all[i];
         if(!isInteractive(el)) continue;
 
-        var b=el.getBoundingClientRect();
-        if(b.width<10 || b.height<10) continue;
-        if(b.width > window.innerWidth * 0.95 && b.height > window.innerHeight * 0.95) continue; // Skip full screen containers
+        var b = el.getBoundingClientRect();
+        if(b.width < 10 || b.height < 10) continue;
+        if(b.width > window.innerWidth * 0.95 && b.height > window.innerHeight * 0.95) continue;
         if(!inViewport(b)) continue;
 
         rawList.push({ el: el, rect: b });
       }catch(e){}
     }
 
-    // Deduplicate: If an element is nested inside another interactive element and occupies substantially the same area, pick the parent or the one with text/aria-label
     var filtered = [];
-    for(var j=0; j<rawList.length; j++){
+    for(var j = 0; j < rawList.length; j++){
       var item = rawList[j];
       var el = item.el;
       var b = item.rect;
       
       var isDuplicate = false;
-      for(var k=0; k<filtered.length; k++){
+      for(var k = 0; k < filtered.length; k++){
         var existing = filtered[k];
         var eb = existing.rect;
         var diffX = Math.abs(b.left - eb.left);
@@ -232,7 +237,6 @@ export class OverlayPrimitive {
 
         if(diffX < 5 && diffY < 5 && diffW < 10 && diffH < 10){
           isDuplicate = true;
-          // Prefer the element with aria-label or text
           if(!existing.text && (el.getAttribute('aria-label') || el.textContent.trim())){
             filtered[k] = item;
           }
@@ -246,7 +250,7 @@ export class OverlayPrimitive {
     }
 
     var count = 0;
-    for(var m=0; m<filtered.length; m++){
+    for(var m = 0; m < filtered.length; m++){
       var f = filtered[m];
       var el = f.el;
       var b = f.rect;
@@ -260,7 +264,8 @@ export class OverlayPrimitive {
         tag: el.tagName,
         text: text,
         x: Math.round(b.left + b.width/2),
-        y: Math.round(b.top + b.height/2)
+        y: Math.round(b.top + b.height/2),
+        domElement: el
       });
     }
 
@@ -268,7 +273,8 @@ export class OverlayPrimitive {
   }
 
   function render(){
-    if(window.__HY_KILL) return;
+    if(window.__HY_KILL || isRendering) return;
+    isRendering = true;
     try{
       var root = document.getElementById('__hyperion_overlay_root');
       if(!root){
@@ -282,10 +288,10 @@ export class OverlayPrimitive {
 
       var banner = document.createElement('div');
       banner.className = 'hy-badge-banner';
-      banner.textContent = '⚡ CAPA MANUS MULTICOLOR ACTIVA [' + els.length + ' ELEMENTOS]';
+      banner.textContent = '⚡ CAPA MANUS SINGLETON [' + els.length + ' ELEMENTOS]';
       root.appendChild(banner);
 
-      for(var i=0; i<els.length; i++){
+      for(var i = 0; i < els.length; i++){
         var e = els[i], b = e.rect, c = COLORS[(e.sid - 1)%COLORS.length];
         var d = document.createElement('div');
         d.className = 'hy-el';
@@ -299,29 +305,66 @@ export class OverlayPrimitive {
 
         root.appendChild(d);
       }
-    }catch(e){}
+
+      window.__HY_OVERLAY_CACHE = els;
+    }catch(e){
+    }finally{
+      isRendering = false;
+    }
   }
 
   render();
 
-  var tid = setInterval(function(){
-    if(window.__HY_KILL){ clearInterval(tid); return; }
-    render();
-  }, ${interval});
-  window.__HY_INTERVALS.push(tid);
+  var tid = setInterval(render, ${interval});
+  
+  var resizeHandler = function(){ render(); };
+  var scrollHandler = function(){ render(); };
+  window.addEventListener('resize', resizeHandler, { passive: true });
+  window.addEventListener('scroll', scrollHandler, { passive: true });
 
-  window.addEventListener('resize', render, { passive: true });
-  window.addEventListener('scroll', render, { passive: true });
+  var observer = new MutationObserver(function(mutations){
+    var hasNonOverlayMutation = false;
+    for(var i = 0; i < mutations.length; i++){
+      var t = mutations[i].target;
+      if(t && (t.id === '__hyperion_overlay_root' || t.classList?.contains('hy-el'))) continue;
+      hasNonOverlayMutation = true;
+      break;
+    }
+    if(hasNonOverlayMutation) render();
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'style', 'disabled', 'hidden', 'aria-hidden']
+  });
+
+  // Global Singleton Handle with clean destruction API
+  window.__HY_MANUS_SINGLETON = {
+    destroy: function(){
+      clearInterval(tid);
+      window.removeEventListener('resize', resizeHandler);
+      window.removeEventListener('scroll', scrollHandler);
+      observer.disconnect();
+      var root = document.getElementById('__hyperion_overlay_root');
+      if(root) root.remove();
+      var style = document.getElementById('__hyperion_overlay_styles');
+      if(style) style.remove();
+      delete window.__HY_MANUS_SINGLETON;
+    },
+    render: render
+  };
 
   window.__hyData = function(){
     try{
-      var els = collect();
+      var els = window.__HY_OVERLAY_CACHE || collect();
       var dialog = null;
       try{
         var ds = document.querySelectorAll('[role="dialog"]');
-        for(var i=0; i<ds.length; i++){
+        for(var i = 0; i < ds.length; i++){
           var d = ds[i];
-          if(d.offsetWidth===0 || d.offsetHeight===0) continue;
+          if(d.offsetWidth === 0 || d.offsetHeight === 0) continue;
           var r = d.getBoundingClientRect();
           if(r.width < 80 || r.height < 80) continue;
           dialog = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };

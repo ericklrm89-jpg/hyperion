@@ -18,6 +18,7 @@ export * from './connection/resilience/ConnectionPool';
 export * from './connection/resilience/ConnectionHealthCheck';
 export * from './vision/VisionEngine';
 export * from './tools/facebook/postToFacebook';
+export * from './tools/instagram/postToInstagram';
 export * from './tools/gmail/sendGmail';
 export * from './tools/whatsapp/sendWhatsApp';
 export * from './overlay/OverlayEngine';

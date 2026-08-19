@@ -26,6 +26,7 @@ export * from './vision/VisionEngine';
 
 // Tools & Integrations
 export * from './tools/facebook/postToFacebook';
+export * from './tools/instagram/postToInstagram';
 export * from './tools/gmail/sendGmail';
 export * from './tools/whatsapp/sendWhatsApp';
 

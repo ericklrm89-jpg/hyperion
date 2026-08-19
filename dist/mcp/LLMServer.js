@@ -6,6 +6,7 @@ const ActionRegistry_1 = require("../core/ActionRegistry");
 const VisionEngine_1 = require("../vision/VisionEngine");
 const OverlayEngine_1 = require("../overlay/OverlayEngine");
 const postToFacebook_1 = require("../tools/facebook/postToFacebook");
+const postToInstagram_1 = require("../tools/instagram/postToInstagram");
 const sendGmail_1 = require("../tools/gmail/sendGmail");
 const sendWhatsApp_1 = require("../tools/whatsapp/sendWhatsApp");
 /**
@@ -219,9 +220,8 @@ class LLMServer {
         });
         // FACEBOOK POST
         this.registry.register(postToFacebook_1.postToFacebookAction);
-        // GMAIL SEND
+        this.registry.register(postToInstagram_1.postToInstagramAction);
         this.registry.register(sendGmail_1.sendGmailAction);
-        // WHATSAPP SEND
         this.registry.register(sendWhatsApp_1.sendWhatsAppAction);
     }
     /**
@@ -366,6 +366,9 @@ class LLMServer {
                 }
                 case 'facebook-post': {
                     return (0, postToFacebook_1.executePostToFacebook)(this.hyperion.cxn, validated);
+                }
+                case 'instagram-post': {
+                    return (0, postToInstagram_1.executePostToInstagram)(this.hyperion.cxn, validated);
                 }
                 case 'gmail-send': {
                     return (0, sendGmail_1.executeSendGmail)(this.hyperion.cxn, validated);

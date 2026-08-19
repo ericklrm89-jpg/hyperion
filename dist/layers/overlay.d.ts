@@ -1,5 +1,10 @@
 import { ConnectionManager } from '../connection';
 import { OverlayData, OverlayConfig, OverlayElement } from './types';
+/**
+ * OverlayPrimitive (Capa Manus Singleton)
+ * Guarantees STRICTLY ONE SINGLE OVERLAY instance in the browser at all times.
+ * Automatically destroys any previous layers before starting.
+ */
 export declare class OverlayPrimitive {
     private cxn;
     private detector;
