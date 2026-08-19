@@ -11,24 +11,26 @@
 
 // Core framework
 export * from './core/types';
-export * from './core/errors';
-export * from './core/action-registry';
+export * from './core/ActionRegistry';
 
 // Connection & Resilience
-export * from './connection/resilience/heartbeat-manager';
-export * from './connection/resilience/reconnection-manager';
-export * from './connection/resilience/connection-pool';
+export * from './connection/resilience/HeartbeatManager';
+export * from './connection/resilience/ReconnectionManager';
+export * from './connection/resilience/ConnectionPool';
+export * from './connection/resilience/ConnectionHealthCheck';
 
 // Vision Engine
-export * from './vision/vision-engine';
-export * from './vision/platform-detector';
+export * from './vision/VisionEngine';
 
 // Overlay System
-export * from './overlay/overlay-engine';
+export * from './overlay/OverlayEngine';
 
 // MCP/LLM Integration
-export * from './mcp/llm-server';
-export * from './mcp/tool-registry';
+export * from './mcp/LLMServer';
+export * from './mcp/MCPServerAdapter';
+
+// Main Hyperion Browser Instance
+export * from './hyperion';
 
 // Re-export common types for convenience
 export type {
@@ -36,17 +38,31 @@ export type {
   ActionExecution,
   ActionAttempt,
   VisionFrame,
-  OverlayElement,
   OverlayState,
   ConnectionMetrics,
-  ConnectionState,
-  HeartbeatMessage,
+  Heartbeat,
   HeartbeatAck,
   RetryPolicy,
+  HyperionError,
 } from './core/types';
 
 // Export factory functions
-export { createHyperionServer } from './mcp/llm-server';
-export { createActionRegistry } from './core/action-registry';
-export { createVisionEngine } from './vision/vision-engine';
-export { createOverlayEngine } from './overlay/overlay-engine';
+export function createHyperionServer(hyperion: any, options?: any) {
+  const { LLMServer } = require('./mcp/LLMServer');
+  return new LLMServer(hyperion, options);
+}
+
+export function createActionRegistry() {
+  const { ActionRegistry } = require('./core/ActionRegistry');
+  return new ActionRegistry();
+}
+
+export function createVisionEngine(hyperion: any, overlay?: any) {
+  const { VisionEngine } = require('./vision/VisionEngine');
+  return new VisionEngine(hyperion, overlay);
+}
+
+export function createOverlayEngine() {
+  const { OverlayEngine } = require('./overlay/OverlayEngine');
+  return new OverlayEngine();
+}

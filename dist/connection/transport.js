@@ -5,9 +5,12 @@ const events_1 = require("events");
 const config_1 = require("../config");
 const errors_1 = require("../cdp/errors");
 class Transport extends events_1.EventEmitter {
-    pending = new Map();
-    msgId = 0;
-    buffer = [];
+    constructor() {
+        super(...arguments);
+        this.pending = new Map();
+        this.msgId = 0;
+        this.buffer = [];
+    }
     getNextId() {
         return ++this.msgId;
     }

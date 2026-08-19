@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SelectPrimitive = void 0;
 class SelectPrimitive {
-    cxn;
     constructor(cxn) {
         this.cxn = cxn;
     }

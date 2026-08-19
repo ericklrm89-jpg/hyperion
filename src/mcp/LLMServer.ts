@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { Hyperion } from '../../hyperion';
-import { ActionRegistry } from '../../core/ActionRegistry';
-import { VisionEngine } from '../../vision/VisionEngine';
-import { OverlayEngine } from '../../overlay/OverlayEngine';
-import { ActionDefinition } from '../../core/types';
+import { Hyperion } from '../hyperion';
+import { ActionRegistry } from '../core/ActionRegistry';
+import { VisionEngine } from '../vision/VisionEngine';
+import { OverlayEngine } from '../overlay/OverlayEngine';
+import { ActionDefinition } from '../core/types';
 
 /**
  * LLM-Native Server Schema Definitions
@@ -253,7 +253,7 @@ export class LLMServer {
    * Execute action by ID
    */
   async executeAction(actionId: string, input: any): Promise<any> {
-    return this.registry.execute(actionId, input, async (validated) => {
+    return this.registry.execute(actionId, input, async (validated: any) => {
       switch (actionId) {
         case 'screenshot': {
           const buf = await this.hyperion.screenshot.capture({
@@ -290,7 +290,7 @@ export class LLMServer {
             await this.hyperion.click.click(target.selector);
             return { clicked: true, selector: target.selector };
           } else {
-            await this.hyperion.click.clickCoordinates(target.x, target.y);
+            await this.hyperion.click.clickAt(target.x, target.y);
             return { clicked: true, x: target.x, y: target.y };
           }
         }
@@ -299,7 +299,7 @@ export class LLMServer {
           const target = validated.target;
           if ('overlayId' in target) {
             const elements = await this.overlay.getElements(this.hyperion);
-            const el = elements.find(e => e.overlayId === target.overlayId);
+            const el = elements.find((e: any) => e.overlayId === target.overlayId);
             if (el) {
               await this.hyperion.type.type(el.selector, validated.text, {
                 clearField: validated.clearFirst,
@@ -385,7 +385,7 @@ export class LLMServer {
 
         case 'scroll': {
           if (validated.toElement) {
-            await this.hyperion.scroll.scrollIntoView(validated.toElement);
+            await this.hyperion.scroll.scroll({ selector: validated.toElement });
           } else {
             const deltaY = validated.direction === 'down' ? validated.amount : -validated.amount;
             await this.hyperion.scroll.scroll({ deltaY });

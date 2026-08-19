@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ClickPrimitive = void 0;
 class ClickPrimitive {
-    cxn;
     constructor(cxn) {
         this.cxn = cxn;
     }

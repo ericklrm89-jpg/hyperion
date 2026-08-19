@@ -39,7 +39,7 @@ export class MCPServerAdapter {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       const definitions = this.llmServer.getActionDefinitions();
 
-      const tools: Tool[] = definitions.map(def => {
+      const tools: Tool[] = definitions.map((def: any) => {
         // Convert Zod schema to JSON schema
         const jsonSchema = this.zodToJsonSchema(def.schema);
 

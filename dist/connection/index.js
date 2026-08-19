@@ -6,10 +6,8 @@ const launch_1 = require("./launch");
 const attach_1 = require("./attach");
 const domains_1 = require("../cdp/domains");
 class ConnectionManager {
-    transport;
-    enabledDomains = new Map();
-    config;
     constructor(config) {
+        this.enabledDomains = new Map();
         this.config = config;
         this.transport = this.createTransport(config.mode);
     }

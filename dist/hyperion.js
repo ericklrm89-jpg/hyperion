@@ -5,17 +5,6 @@ const connection_1 = require("./connection");
 const config_1 = require("./config");
 const primitives_1 = require("./primitives");
 class Hyperion {
-    cxn;
-    click;
-    type;
-    screenshot;
-    navigate;
-    scroll;
-    select;
-    upload;
-    dialog;
-    overlay;
-    config;
     constructor(config) {
         this.config = { ...config_1.DEFAULT_CONFIG, ...config };
         this.cxn = new connection_1.ConnectionManager(this.config);

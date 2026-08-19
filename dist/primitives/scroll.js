@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ScrollPrimitive = void 0;
 class ScrollPrimitive {
-    cxn;
     constructor(cxn) {
         this.cxn = cxn;
     }

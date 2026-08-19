@@ -56,8 +56,8 @@ export class VisionEngine extends EventEmitter {
 
           // Emit only if significant changes
           if (
-            frame.changes.added.length > 0 ||
-            frame.changes.removed.length > 0
+            (frame.changes?.added?.length || 0) > 0 ||
+            (frame.changes?.removed?.length || 0) > 0
           ) {
             this.emit('frame-changed', frame);
           }

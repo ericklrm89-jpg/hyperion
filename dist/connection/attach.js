@@ -4,11 +4,10 @@ exports.AttachTransport = void 0;
 const transport_1 = require("./transport");
 const WebSocket = require("ws");
 class AttachTransport extends transport_1.Transport {
-    wsUrl;
-    ws = null;
     constructor(wsUrl) {
         super();
         this.wsUrl = wsUrl;
+        this.ws = null;
     }
     async connect() {
         this.ws = new WebSocket(this.wsUrl);

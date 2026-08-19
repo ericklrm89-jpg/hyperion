@@ -39,14 +39,11 @@ const WebSocket = require("ws");
 const http = __importStar(require("http"));
 const child_process_1 = require("child_process");
 class LaunchTransport extends transport_1.Transport {
-    ws = null;
-    chromeProcess = null;
-    chromePath;
-    userDataDir;
-    port;
-    resolvedWsUrl = null;
     constructor(options) {
         super();
+        this.ws = null;
+        this.chromeProcess = null;
+        this.resolvedWsUrl = null;
         this.port = options.port || 0;
         this.chromePath = options.chromePath || this.getDefaultChromePath();
         this.userDataDir = options.userDataDir || '';

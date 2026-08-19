@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ActionDefinition, ActionExecution, ActionAttempt } from '../../core/types';
+import { ActionDefinition, ActionExecution, ActionAttempt } from './types';
 
 /**
  * Validation error with schema context

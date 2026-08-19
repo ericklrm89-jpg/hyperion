@@ -13,7 +13,6 @@ exports.LayerDetector = void 0;
  * - "unknown" : could not determine
  */
 class LayerDetector {
-    cxn;
     constructor(cxn) {
         this.cxn = cxn;
     }

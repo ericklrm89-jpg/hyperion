@@ -3,16 +3,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OverlayPrimitive = void 0;
 const detector_1 = require("./detector");
 class OverlayPrimitive {
-    cxn;
-    detector;
-    injected = false;
-    defaultConfig = {
-        intervalMs: 2000,
-        includePostLinks: true,
-        gridSize: 200,
-        zIndex: 2147483647
-    };
     constructor(cxn) {
+        this.injected = false;
+        this.defaultConfig = {
+            intervalMs: 2000,
+            includePostLinks: true,
+            gridSize: 200,
+            zIndex: 2147483647
+        };
         this.cxn = cxn;
         this.detector = new detector_1.LayerDetector(cxn);
     }

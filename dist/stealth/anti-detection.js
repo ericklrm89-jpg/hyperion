@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AntiDetection = void 0;
 class AntiDetection {
-    cxn;
     constructor(cxn) {
         this.cxn = cxn;
     }

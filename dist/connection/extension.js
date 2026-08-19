@@ -36,12 +36,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ExtensionTransport = void 0;
 const transport_1 = require("./transport");
 class ExtensionTransport extends transport_1.Transport {
-    hostPath;
-    process = null;
-    connected = false;
     constructor(hostPath) {
         super();
         this.hostPath = hostPath;
+        this.process = null;
+        this.connected = false;
     }
     async connect() {
         const { spawn } = await Promise.resolve().then(() => __importStar(require('child_process')));

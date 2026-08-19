@@ -3,8 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.NavigatePrimitive = void 0;
 const events_1 = require("events");
 class NavigatePrimitive {
-    cxn;
-    lifecycleEmitter;
     constructor(cxn) {
         this.cxn = cxn;
         this.lifecycleEmitter = new events_1.EventEmitter();

@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.JSONLDExtractor = void 0;
 class JSONLDExtractor {
-    cxn;
     constructor(cxn) {
         this.cxn = cxn;
     }

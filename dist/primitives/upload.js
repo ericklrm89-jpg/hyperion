@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UploadPrimitive = void 0;
 class UploadPrimitive {
-    cxn;
     constructor(cxn) {
         this.cxn = cxn;
     }

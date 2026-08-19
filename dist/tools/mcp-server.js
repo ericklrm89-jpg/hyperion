@@ -5,8 +5,6 @@ const index_js_1 = require("@modelcontextprotocol/sdk/server/index.js");
 const stdio_js_1 = require("@modelcontextprotocol/sdk/server/stdio.js");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 class MCPServer {
-    server;
-    hyperion;
     constructor(hyperion) {
         this.hyperion = hyperion;
         this.server = new index_js_1.Server({

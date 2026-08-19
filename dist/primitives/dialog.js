@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DialogPrimitive = void 0;
 class DialogPrimitive {
-    cxn;
     constructor(cxn) {
         this.cxn = cxn;
     }
