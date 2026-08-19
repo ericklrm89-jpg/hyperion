@@ -1,11 +1,11 @@
 /**
  * HYPERION INTERACTIVE PROFILE & MULTI-PORT SUPERVISOR
- * Selector interactivo de perfil real y puerto CDP personalizado (9222..9240).
+ * Selector interactivo de perfil real y puerto CDP personalizado (9001, 9222..9240).
  */
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
 const readline = require('readline');
 const { ProfileScanner } = require('../dist/connection/resilience/ProfileScanner');
 const { PortSessionManager } = require('../dist/connection/resilience/PortSessionManager');
@@ -191,7 +191,13 @@ async function main() {
   console.log(`\n🚀 Iniciando ${selected.browser} con Perfil Real "${selected.name}" en Puerto CDP: ${targetPort}...`);
   saveLastProfile(selected);
 
-  // 3. Limpiar bloqueos del directorio de perfil real del usuario
+  // 3. Limpiar procesos huérfanos y bloqueos del perfil real para permitir enlace de puerto
+  const isPortLive = await PortSessionManager.isPortInUse(targetPort);
+  if (!isPortLive) {
+    try {
+      execSync('taskkill /f /im chrome.exe /im msedge.exe /im brave.exe >nul 2>&1', { stdio: 'ignore' });
+    } catch (e) {}
+  }
   cleanProfileLocks(selected.userDataDir);
 
   const chromeFlags = [
