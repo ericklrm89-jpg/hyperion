@@ -1,13 +1,14 @@
 /**
- * HYPERION INTERACTIVE PROFILE & MULTI-PORT SESSION MANAGER
- * Persistent Supervisor Dashboard with Live CDP Port Tracking for AI Agents
+ * HYPERION INTERACTIVE PROFILE & MULTI-PORT SUPERVISOR
+ * True Multi-Instance Isolation: Separate ports (9222, 9223, 9224...), zero process leaks.
  */
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const net = require('net');
 const { spawn, execSync } = require('child_process');
 const readline = require('readline');
-const { scanAllProfiles } = require('./profile_scanner');
+const { ProfileScanner } = require('../dist/connection/resilience/ProfileScanner');
 const { PortSessionManager } = require('../dist/connection/resilience/PortSessionManager');
 
 const LAST_PROFILE_FILE = path.join(__dirname, '..', '.last_profile.json');
@@ -27,10 +28,10 @@ function saveLastProfile(profile) {
   } catch (e) {}
 }
 
-function cleanProfileLocks(userDataDir) {
+function cleanProfileLocks(dir) {
   const locks = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lockfile'];
   for (const lock of locks) {
-    const fullPath = path.join(userDataDir, lock);
+    const fullPath = path.join(dir, lock);
     try {
       if (fs.existsSync(fullPath)) {
         fs.unlinkSync(fullPath);
@@ -69,7 +70,7 @@ function drawPersistentDashboard(selected, port, tabs = []) {
   console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
   console.log(`║   • Navegador Activo   : ${selected.browser.padEnd(56)} ║`);
   console.log(`║   • Perfil en Uso      : ${(selected.name + ' (' + (selected.userName || selected.profileDir) + ')').padEnd(56)} ║`);
-  console.log(`║   • Directorio Perfil  : ${selected.profileDir.padEnd(56)} ║`);
+  console.log(`║   • Carpeta de Datos   : ${selected.profileDir.padEnd(56)} ║`);
   console.log(`║   • Pestañas Abiertas  : ${tabs.length.toString().padEnd(56)} ║`);
   console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
   console.log('║   📋 PESTAÑAS DETECTADAS EN VIVO:                                                 ║');
@@ -101,14 +102,15 @@ async function main() {
   console.log('╚═══════════════════════════════════════════════════════════════════════════════════╝\n');
 
   console.log('🔍 Escaneando navegadores, perfiles y puertos CDP activos (9222..9240)...\n');
-  const profiles = scanAllProfiles();
+  const profiles = ProfileScanner.scanAllProfiles();
   const activeSessions = await PortSessionManager.getActiveSessions();
 
   if (profiles.length === 0) {
     console.error('❌ No se encontraron navegadores instalados en este equipo.');
-    console.log('\nPresiona cualquier tecla para salir...');
-    process.stdin.read();
-    process.exit(1);
+    console.log('\nPresiona Enter para salir...');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question('', () => process.exit(1));
+    return;
   }
 
   // Sort profiles by activeTime descending (most recent first)
@@ -141,10 +143,16 @@ async function main() {
   });
   console.log('└─────┴─────────────────┴──────────────────────┴────────────────────────────────┴────────────────────────────┘\n');
 
-  const defaultIndex = profiles.findIndex(p => 
-    lastProfile ? (lastProfile.userDataDir === p.userDataDir && lastProfile.profileDir === p.profileDir) : p.isDefault
-  );
-  const promptDefault = defaultIndex >= 0 ? defaultIndex + 1 : 1;
+  // Encontrar el primer perfil disponible o el último usado si está libre
+  const availableProfileIdx = profiles.findIndex(p => {
+    const isBusy = activeSessions.some(s => 
+      s.userDataDir.toLowerCase() === p.userDataDir.toLowerCase() &&
+      s.profileDir.toLowerCase() === p.profileDir.toLowerCase()
+    );
+    return !isBusy;
+  });
+
+  const promptDefault = availableProfileIdx >= 0 ? availableProfileIdx + 1 : 1;
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -169,6 +177,7 @@ async function main() {
   );
 
   let targetPort = 9222;
+  let browserChild = null;
 
   if (activeMatch) {
     console.log(`\n⚠️  ATENCIÓN: El perfil "${selected.name}" YA ESTÁ ACTIVO en el puerto ${activeMatch.port}.`);
@@ -179,7 +188,9 @@ async function main() {
     if (choice === '2') {
       console.log('\n[1/3] Cerrando navegador previo para reiniciar perfil...');
       try {
-        execSync('taskkill /f /im chrome.exe /im msedge.exe /im brave.exe >nul 2>&1', { stdio: 'ignore' });
+        if (activeMatch.pid) {
+          process.kill(activeMatch.pid, 'SIGKILL');
+        }
       } catch (e) {}
       cleanProfileLocks(selected.userDataDir);
       await PortSessionManager.releaseSession(activeMatch.port);
@@ -188,7 +199,7 @@ async function main() {
       targetPort = activeMatch.port;
     }
   } else {
-    // Determine available port
+    // Determine the next available free port (e.g. 9222, 9223, 9224...)
     targetPort = await PortSessionManager.findNextAvailablePort(9222, 9240);
   }
 
@@ -199,10 +210,15 @@ async function main() {
     // 1. Limpiar bloqueos de perfil
     cleanProfileLocks(selected.userDataDir);
 
-    // 2. Iniciar el navegador con CDP en el puerto asignado
+    // 2. Si no es el puerto 9222 o es una instancia paralela, usar directorio aislado si es necesario
+    let effectiveUserDataDir = selected.userDataDir;
+    if (targetPort !== 9222) {
+      effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
+    }
+
     const args = [
       `--remote-debugging-port=${targetPort}`,
-      `--user-data-dir=${selected.userDataDir}`,
+      `--user-data-dir=${effectiveUserDataDir}`,
       `--profile-directory=${selected.profileDir}`,
       '--no-first-run',
       '--restore-last-session',
@@ -212,11 +228,10 @@ async function main() {
       'https://www.facebook.com'
     ];
 
-    const child = spawn(selected.exe, args, {
-      detached: true,
+    browserChild = spawn(selected.exe, args, {
+      detached: false,
       stdio: 'ignore',
     });
-    child.unref();
 
     // 3. Registrar sesión activa
     await PortSessionManager.registerSession({
@@ -225,7 +240,8 @@ async function main() {
       profileDir: selected.profileDir,
       profileName: selected.name,
       userDataDir: selected.userDataDir,
-      pid: child.pid,
+      isolatedDataDir: effectiveUserDataDir,
+      pid: browserChild.pid,
       startedAt: new Date().toISOString(),
       wsUrl: `ws://127.0.0.1:${targetPort}`
     });
@@ -238,33 +254,42 @@ async function main() {
   // DIBUJAR DASHBOARD PERSISTENTE
   drawPersistentDashboard(selected, targetPort, initialTabs);
 
-  // Monitor continuo cada 5 segundos
+  // Monitor continuo cada 4 segundos
   const monitorInterval = setInterval(async () => {
     const tabs = await queryCdpTabs(targetPort);
     drawPersistentDashboard(selected, targetPort, tabs);
-  }, 5000);
+  }, 4000);
+
+  const cleanupAndExit = async () => {
+    clearInterval(monitorInterval);
+    console.log(`\n🛑 Liberando puerto ${targetPort} y cerrando sesión...`);
+    await PortSessionManager.releaseSession(targetPort);
+    if (browserChild && !browserChild.killed) {
+      try {
+        browserChild.kill('SIGKILL');
+      } catch (e) {}
+    }
+    process.exit(0);
+  };
 
   // Manejo de comandos interactivos en la ventana persistente
   rl.on('line', async (line) => {
     const cmd = line.trim().toLowerCase();
     if (cmd === 'q') {
-      console.log('\n🛑 Cerrando sesión y liberando puerto ' + targetPort + '...');
-      clearInterval(monitorInterval);
-      await PortSessionManager.releaseSession(targetPort);
-      rl.close();
-      process.exit(0);
+      await cleanupAndExit();
     } else if (cmd === 'r') {
       const tabs = await queryCdpTabs(targetPort);
       drawPersistentDashboard(selected, targetPort, tabs);
     }
   });
 
-  // Limpieza al recibir SIGINT (Ctrl + C)
-  process.on('SIGINT', async () => {
-    console.log('\n🛑 Interrupción recibida. Liberando sesión...');
-    clearInterval(monitorInterval);
-    await PortSessionManager.releaseSession(targetPort);
-    process.exit(0);
+  // Limpieza al recibir SIGINT (Ctrl + C) o cierre de proceso
+  process.on('SIGINT', cleanupAndExit);
+  process.on('SIGTERM', cleanupAndExit);
+  process.on('exit', () => {
+    try {
+      PortSessionManager.releaseSession(targetPort);
+    } catch (e) {}
   });
 }
 

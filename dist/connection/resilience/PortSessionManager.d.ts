@@ -4,6 +4,7 @@ export interface ActiveSession {
     profileDir: string;
     profileName: string;
     userDataDir: string;
+    isolatedDataDir?: string;
     pid?: number;
     project?: string;
     startedAt: string;
@@ -11,11 +12,11 @@ export interface ActiveSession {
 }
 export declare class PortSessionManager {
     /**
-     * Ensures the storage directory exists
+     * Ensures the storage directories exist
      */
     private static ensureDir;
     /**
-     * Reads all registered sessions and purges inactive/dead ones
+     * Reads all registered sessions and purges inactive/dead ones via fast TCP check
      */
     static getActiveSessions(): Promise<ActiveSession[]>;
     /**
@@ -23,7 +24,7 @@ export declare class PortSessionManager {
      */
     private static saveSessions;
     /**
-     * Probes if a given port is actively listening for CDP commands
+     * Instant OS-level TCP socket check (50ms) to detect if a port is listening
      */
     static isPortInUse(port: number, host?: string, timeoutMs?: number): Promise<boolean>;
     /**
@@ -38,6 +39,10 @@ export declare class PortSessionManager {
      */
     static findNextAvailablePort(startPort?: number, maxPort?: number): Promise<number>;
     /**
+     * Creates an isolated User Data directory for a profile to allow TRUE parallel Chrome processes
+     */
+    static getIsolatedUserDataDir(browserName: string, profileDir: string): string;
+    /**
      * Registers an active session
      */
     static registerSession(session: ActiveSession): Promise<void>;
@@ -45,9 +50,5 @@ export declare class PortSessionManager {
      * Releases an active session by port
      */
     static releaseSession(port: number): Promise<void>;
-    /**
-     * Checks if a profile is currently in use by any active session
-     */
-    static isProfileLocked(userDataDir: string, profileDir: string): Promise<ActiveSession | null>;
 }
 //# sourceMappingURL=PortSessionManager.d.ts.map
