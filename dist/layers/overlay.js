@@ -36,6 +36,7 @@ class OverlayPrimitive {
         await this.cxn.evaluate(`
       (function(){
         try {
+          if (window.__HYT) { clearInterval(window.__HYT); delete window.__HYT; }
           if (window.__HY_MANUS_SINGLETON && typeof window.__HY_MANUS_SINGLETON.destroy === 'function') {
             window.__HY_MANUS_SINGLETON.destroy();
           }
@@ -47,7 +48,12 @@ class OverlayPrimitive {
             window.__HY_OBSERVERS.forEach(function(obs){ obs.disconnect(); });
             window.__HY_OBSERVERS = [];
           }
-          document.querySelectorAll('#__hyperion_overlay_root, #__hyperion_overlay_container, [id^="__hyperion_overlay"], .hy-el, .hy-tp, .hy-overlay-rect').forEach(function(e){ e.remove(); });
+          // Clear any orphan intervals
+          var highestId = window.setInterval(function(){}, 1000);
+          for (var i = 0; i <= highestId; i++) {
+            window.clearInterval(i);
+          }
+          document.querySelectorAll('#__hyperion_overlay_root, #__hyperion_overlay_container, [id^="__hyperion_overlay"], .hy-el, .hy-tp, .hy-overlay-rect, .HYL, .HYS').forEach(function(e){ e.remove(); });
           if (!${keepStyles}) {
             document.querySelectorAll('.hy-st, #__hyperion_overlay_styles').forEach(function(e){ e.remove(); });
           }
@@ -163,18 +169,20 @@ class OverlayPrimitive {
   }
 
   function isInteractive(el){
-    if(!el || el.id === '__hyperion_overlay_root' || el.classList.contains('hy-el')) return false;
-    if(el.offsetWidth === 0 || el.offsetHeight === 0) return false;
-    if(el.tagName === 'SVG' || el.tagName === 'PATH' || el.tagName === 'G') return false;
-
+    if(!el || el.nodeType !== 1) return false;
     var tag = el.tagName;
     if(tag === 'BUTTON' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'A') return true;
     if(el.isContentEditable || el.getAttribute('contenteditable') === 'true' || el.getAttribute('role') === 'textbox') return true;
     
     var role = el.getAttribute('role');
-    if(role === 'button' || role === 'tab' || role === 'menuitem' || role === 'listitem' || role === 'row' || role === 'option' || role === 'switch' || role === 'checkbox' || role === 'link') return true;
+    if(role === 'button' || role === 'tab' || role === 'menuitem' || role === 'listitem' || role === 'row' || role === 'gridcell' || role === 'option' || role === 'switch' || role === 'checkbox' || role === 'link') return true;
 
     if(el.hasAttribute('onclick') || el.hasAttribute('data-icon') || el.hasAttribute('data-tab') || el.hasAttribute('data-testid')) return true;
+
+    if(el.tabIndex >= 0 || el.getAttribute('tabindex') === '-1') {
+      var txt = (el.textContent || '').trim();
+      if(txt && el.parentElement && el.parentElement.getAttribute('role') === 'grid') return true;
+    }
 
     var style = window.getComputedStyle(el);
     if(style.cursor === 'pointer') return true;
@@ -187,14 +195,36 @@ class OverlayPrimitive {
     var all = document.querySelectorAll('*');
     var rawList = [];
 
+    // 1. First find top-level semantic rows in list / chat panes
+    var chatRows = Array.from(document.querySelectorAll('#pane-side [role="row"], #pane-side [role="listitem"], [role="feed"] [role="article"], [role="dialog"] [role="button"]'));
+    var rowElements = new Set();
+    for(var cr = 0; cr < chatRows.length; cr++){
+      var row = chatRows[cr];
+      var rb = row.getBoundingClientRect();
+      if(rb.width >= 20 && rb.height >= 20 && inViewport(rb)){
+        rawList.push({ el: row, rect: rb, isPriorityRow: true });
+        rowElements.add(row);
+      }
+    }
+
     for(var i = 0; i < all.length; i++){
       try{
         var el = all[i];
         if(!isInteractive(el)) continue;
 
+        // Skip internal children of prioritized rows unless they are independent buttons/actions
+        if(!rowElements.has(el) && el.closest('#pane-side [role="row"]')) {
+          if(el.tagName !== 'BUTTON' && el.getAttribute('role') !== 'button') continue;
+        }
+
+        // Skip internal svg/path/span if parent is already a button
+        if((el.tagName === 'svg' || el.tagName === 'path' || el.tagName === 'SPAN' || el.tagName === 'DIV') && el.closest('button, [role="button"], a[href]')) {
+          if(el.tagName !== 'BUTTON' && el.getAttribute('role') !== 'button') continue;
+        }
+
         var b = el.getBoundingClientRect();
-        if(b.width < 10 || b.height < 10) continue;
-        if(b.width > window.innerWidth * 0.95 && b.height > window.innerHeight * 0.95) continue;
+        if(b.width < 8 || b.height < 8) continue;
+        if(b.width > window.innerWidth * 0.98 && b.height > window.innerHeight * 0.98) continue;
         if(!inViewport(b)) continue;
 
         rawList.push({ el: el, rect: b });
@@ -216,9 +246,11 @@ class OverlayPrimitive {
         var diffW = Math.abs(b.width - eb.width);
         var diffH = Math.abs(b.height - eb.height);
 
-        if(diffX < 5 && diffY < 5 && diffW < 10 && diffH < 10){
+        // If almost same geometry
+        if(diffX < 8 && diffY < 8 && diffW < 16 && diffH < 16){
           isDuplicate = true;
-          if(!existing.text && (el.getAttribute('aria-label') || el.textContent.trim())){
+          // Prefer parent row / button with meaningful text
+          if(!existing.isPriorityRow && item.isPriorityRow){
             filtered[k] = item;
           }
           break;
@@ -301,7 +333,7 @@ class OverlayPrimitive {
   var resizeHandler = function(){ render(); };
   var scrollHandler = function(){ render(); };
   window.addEventListener('resize', resizeHandler, { passive: true });
-  window.addEventListener('scroll', scrollHandler, { passive: true });
+  window.addEventListener('scroll', scrollHandler, { passive: true, capture: true });
 
   var observer = new MutationObserver(function(mutations){
     var hasNonOverlayMutation = false;

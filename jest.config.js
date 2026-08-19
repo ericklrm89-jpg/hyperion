@@ -7,5 +7,7 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'json'],
   transform: {
     '^.+\\.ts$': 'ts-jest'
-  }
-}
+  },
+  forceExit: true,
+  maxWorkers: 2,
+};

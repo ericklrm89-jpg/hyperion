@@ -34,6 +34,8 @@ export const clickSchema = z.object({
     z.object({ x: z.number(), y: z.number() }).describe('Coordinates'),
   ]).describe('Click target (overlayId, selector, or coordinates)'),
   button: z.enum(['left', 'right', 'middle']).default('left'),
+  strategy: z.enum(['cdp-first', 'js-first', 'js-only']).default('cdp-first').describe('Click execution strategy with dual-tier fallback'),
+  fastJS: z.boolean().default(false).describe('Direct synthetic JavaScript click without mouse physics'),
 });
 
 export const typeSchema = z.object({
@@ -301,10 +303,16 @@ export class LLMServer {
             const clicked = await this.overlay.clickById(this.hyperion, target.overlayId);
             return { clicked, overlayId: target.overlayId };
           } else if ('selector' in target) {
-            await this.hyperion.click.click(target.selector);
-            return { clicked: true, selector: target.selector };
+            await this.hyperion.click.click(target.selector, {
+              button: validated.button,
+              strategy: validated.strategy,
+              fastJS: validated.fastJS,
+            });
+            return { clicked: true, selector: target.selector, strategy: validated.strategy, fastJS: validated.fastJS };
           } else {
-            await this.hyperion.click.clickAt(target.x, target.y);
+            await this.hyperion.click.clickAt(target.x, target.y, {
+              button: validated.button,
+            });
             return { clicked: true, x: target.x, y: target.y };
           }
         }

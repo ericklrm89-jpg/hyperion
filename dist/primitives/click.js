@@ -5,23 +5,39 @@ class ClickPrimitive {
     constructor(cxn) {
         this.cxn = cxn;
     }
+    /**
+     * Performs dual-tier robust click with automatic fallback between CDP and JS synthetic events
+     */
     async click(selector, options = {}) {
-        const { button = 'left', clickCount = 1, delay = 50, modifiers = 0, retries = 3, scrollIntoView = true } = options;
+        const { button = 'left', clickCount = 1, delay = 50, modifiers = 0, retries = 3, scrollIntoView = true, strategy = 'cdp-first', fastJS = false, } = options;
+        // Fast-path: Direct JS synthetic click
+        if (fastJS || strategy === 'js-only') {
+            return await this.clickJS(selector);
+        }
+        // JS-First Strategy with CDP fallback
+        if (strategy === 'js-first') {
+            const jsSuccess = await this.clickJS(selector);
+            if (jsSuccess)
+                return true;
+        }
+        // CDP-First Strategy (Default) with JS fallback
         for (let attempt = 0; attempt <= retries; attempt++) {
             try {
-                // 1. Get element coordinates via JS (avoids CDP node ID staleness)
+                // 1. Get pure viewport coordinates via JS (without window.scrollX/Y pollution)
                 const coords = await this.getElementCoords(selector, scrollIntoView);
-                if (!coords)
-                    throw new Error(`Element not found: ${selector}`);
+                if (!coords) {
+                    // If coordinates calculation fails, attempt JS fallback immediately
+                    return await this.clickJS(selector);
+                }
                 const { centerX, centerY } = coords;
-                // 2. Check for overlays
+                // 2. Check and dismiss any blocking overlay/dialogs
                 const overlay = await this.detectOverlay(centerX, centerY);
                 if (overlay) {
                     await this.dismissOverlay(overlay);
                     await new Promise(r => setTimeout(r, 200));
                     continue;
                 }
-                // 3. Dispatch click sequence
+                // 3. Dispatch CDP mouse click sequence
                 const btnMap = { left: 'left', middle: 'middle', right: 'right' };
                 const btnFlag = { left: 1, middle: 4, right: 2 };
                 await this.cxn.dispatchMouseEvent({
@@ -31,7 +47,7 @@ class ClickPrimitive {
                     button: btnMap[button],
                     buttons: btnFlag[button],
                     clickCount,
-                    modifiers
+                    modifiers,
                 });
                 if (delay > 0) {
                     await new Promise(r => setTimeout(r, delay));
@@ -43,17 +59,64 @@ class ClickPrimitive {
                     button: btnMap[button],
                     buttons: 0,
                     clickCount,
-                    modifiers
+                    modifiers,
                 });
                 return true;
             }
             catch (err) {
-                if (attempt >= retries)
-                    throw err;
-                await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+                if (attempt >= retries) {
+                    // Dual-tier fallback: Try clickJS before giving up
+                    return await this.clickJS(selector);
+                }
+                await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
             }
         }
-        return false;
+        return await this.clickJS(selector);
+    }
+    /**
+     * Dual-Tier JavaScript Click: Complete synthetic event chain + Native .click()
+     * Dispatches PointerEvents, MouseEvents, .focus({ preventScroll: true }) and .click()
+     */
+    async clickJS(selector) {
+        const escaped = selector.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const res = await this.cxn.evaluate(`
+      (() => {
+        try {
+          const el = document.querySelector('${escaped}');
+          if (!el) return { success: false, reason: 'Element not found' };
+
+          // 1. Pointer Down / Up
+          el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, view: window, pointerType: 'mouse', isPrimary: true }));
+          
+          // 2. Mouse Down
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window, buttons: 1 }));
+          
+          // 3. Focus if focusable
+          if (typeof (el as any).focus === 'function') {
+            (el as any).focus({ preventScroll: true });
+          }
+
+          // 4. Pointer Up
+          el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, view: window, pointerType: 'mouse', isPrimary: true }));
+          
+          // 5. Mouse Up
+          el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window, buttons: 0 }));
+          
+          // 6. Click Event
+          el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+
+          // 7. Native .click()
+          if (typeof (el as any).click === 'function') {
+            (el as any).click();
+          }
+
+          return { success: true };
+        } catch (e: any) {
+          return { success: false, reason: e?.message || String(e) };
+        }
+      })()
+    `);
+        return !!res?.value?.success;
     }
     async clickAt(x, y, options = {}) {
         const { button = 'left', clickCount = 1, delay = 50, modifiers = 0 } = options;
@@ -61,21 +124,23 @@ class ClickPrimitive {
         const btnFlag = { left: 1, middle: 4, right: 2 };
         await this.cxn.dispatchMouseEvent({
             type: 'mousePressed',
-            x, y,
+            x,
+            y,
             button: btnMap[button],
             buttons: btnFlag[button],
             clickCount,
-            modifiers
+            modifiers,
         });
         if (delay > 0)
             await new Promise(r => setTimeout(r, delay));
         await this.cxn.dispatchMouseEvent({
             type: 'mouseReleased',
-            x, y,
+            x,
+            y,
             button: btnMap[button],
             buttons: 0,
             clickCount,
-            modifiers
+            modifiers,
         });
     }
     async hover(selector) {
@@ -87,7 +152,7 @@ class ClickPrimitive {
             x: coords.centerX,
             y: coords.centerY,
             button: 'none',
-            buttons: 0
+            buttons: 0,
         });
     }
     async rightClick(selector) {
@@ -102,7 +167,9 @@ class ClickPrimitive {
       (() => {
         const el = document.querySelector('${escaped}');
         if (!el) return null;
-        if (${scrollIntoView}) el.scrollIntoView({block: 'center', behavior: 'instant'});
+        if (${scrollIntoView}) {
+          el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+        }
         const r = el.getBoundingClientRect();
         return JSON.stringify({
           centerX: Math.round(r.left + r.width / 2),

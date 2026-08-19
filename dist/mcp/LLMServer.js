@@ -31,6 +31,8 @@ exports.clickSchema = zod_1.z.object({
         zod_1.z.object({ x: zod_1.z.number(), y: zod_1.z.number() }).describe('Coordinates'),
     ]).describe('Click target (overlayId, selector, or coordinates)'),
     button: zod_1.z.enum(['left', 'right', 'middle']).default('left'),
+    strategy: zod_1.z.enum(['cdp-first', 'js-first', 'js-only']).default('cdp-first').describe('Click execution strategy with dual-tier fallback'),
+    fastJS: zod_1.z.boolean().default(false).describe('Direct synthetic JavaScript click without mouse physics'),
 });
 exports.typeSchema = zod_1.z.object({
     text: zod_1.z.string().describe('Text to type'),
@@ -265,11 +267,17 @@ class LLMServer {
                         return { clicked, overlayId: target.overlayId };
                     }
                     else if ('selector' in target) {
-                        await this.hyperion.click.click(target.selector);
-                        return { clicked: true, selector: target.selector };
+                        await this.hyperion.click.click(target.selector, {
+                            button: validated.button,
+                            strategy: validated.strategy,
+                            fastJS: validated.fastJS,
+                        });
+                        return { clicked: true, selector: target.selector, strategy: validated.strategy, fastJS: validated.fastJS };
                     }
                     else {
-                        await this.hyperion.click.clickAt(target.x, target.y);
+                        await this.hyperion.click.clickAt(target.x, target.y, {
+                            button: validated.button,
+                        });
                         return { clicked: true, x: target.x, y: target.y };
                     }
                 }

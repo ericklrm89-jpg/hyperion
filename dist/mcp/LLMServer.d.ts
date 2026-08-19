@@ -51,8 +51,12 @@ export declare const clickSchema: z.ZodObject<{
         x: number;
     }>]>;
     button: z.ZodDefault<z.ZodEnum<["left", "right", "middle"]>>;
+    strategy: z.ZodDefault<z.ZodEnum<["cdp-first", "js-first", "js-only"]>>;
+    fastJS: z.ZodDefault<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
     button: "left" | "middle" | "right";
+    strategy: "cdp-first" | "js-first" | "js-only";
+    fastJS: boolean;
     target: {
         overlayId: number;
     } | {
@@ -71,6 +75,8 @@ export declare const clickSchema: z.ZodObject<{
         x: number;
     };
     button?: "left" | "middle" | "right" | undefined;
+    strategy?: "cdp-first" | "js-first" | "js-only" | undefined;
+    fastJS?: boolean | undefined;
 }>;
 export declare const typeSchema: z.ZodObject<{
     text: z.ZodString;
