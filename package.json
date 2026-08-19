@@ -14,8 +14,6 @@
     "dev": "ts-node src/index.ts",
     "server": "ts-node src/mcp/llm-server.ts",
     "facebook:post": "node dist/cli.js run facebook-post",
-    "tiktok": "node scripts/tiktok-delete-18min-and-reupload-10s.js",
-    "overlay": "node scripts/inject-permanent-overlay.js",
     "test": "jest --config jest.config.js",
     "test:integration": "jest --config jest.config.js --testMatch '**/tests/integration/**/*.test.ts'",
     "test:unit": "jest --config jest.config.js --testMatch '**/tests/unit/**/*.test.ts'",
