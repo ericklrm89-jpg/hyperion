@@ -1,5 +1,5 @@
 import { Transport } from '../transport';
-import { ConnectionMetrics, ConnectionState } from '../../core/types';
+import { logger } from '../../core/logger';
 
 export interface HealthCheckOptions {
   intervalMs?: number;
@@ -38,13 +38,13 @@ export class ConnectionHealthCheck {
 
     this.interval = setInterval(() => {
       this.performCheck().catch(err => {
-        console.warn('[HealthCheck] Check failed:', err.message);
+        logger.warn({ err: err.message }, '[HealthCheck] Check failed');
       });
     }, this.options.intervalMs);
 
-    console.log(
-      `[HealthCheck] Started (interval: ${this.options.intervalMs}ms, ` +
-      `timeout: ${this.options.timeoutMs}ms)`
+    logger.info(
+      { intervalMs: this.options.intervalMs, timeoutMs: this.options.timeoutMs },
+      `[HealthCheck] Started (interval: ${this.options.intervalMs}ms, timeout: ${this.options.timeoutMs}ms)`
     );
   }
 
@@ -71,7 +71,7 @@ export class ConnectionHealthCheck {
       }
 
       // For deeper checks, try to get version info
-      const result = await Promise.race([
+      await Promise.race([
         this.transport.call('Browser.getVersion'),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Health check timeout')), this.options.timeoutMs)
@@ -83,7 +83,7 @@ export class ConnectionHealthCheck {
         this.isHealthy = true;
         this.consecutiveFailures = 0;
         this.options.onHealthy();
-        console.log('[HealthCheck] ✓ Healthy');
+        logger.info('[HealthCheck] ✓ Healthy');
       }
     } catch (err: any) {
       this.consecutiveFailures++;
@@ -91,7 +91,8 @@ export class ConnectionHealthCheck {
       if (this.isHealthy) {
         this.isHealthy = false;
         this.options.onUnhealthy?.(err.message);
-        console.warn(
+        logger.warn(
+          { consecutiveFailures: this.consecutiveFailures, err: err.message },
           `[HealthCheck] ✗ Unhealthy (${this.consecutiveFailures} failures): ${err.message}`
         );
       }

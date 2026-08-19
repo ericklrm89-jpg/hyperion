@@ -1,5 +1,6 @@
 import { Hyperion } from '../hyperion';
 import { OverlayState } from '../core/types';
+import { logger } from '../core/logger';
 
 /**
  * Overlay Engine - Robust element mapping with guaranteed single injection
@@ -32,7 +33,7 @@ export class OverlayEngine {
     if (alreadyInjected?.value) {
       this.state.injected = true;
       this.state.lastRefreshAt = Date.now();
-      console.log('[Overlay] Already injected, reusing');
+      logger.info('[Overlay] Already injected, reusing');
       return this.state;
     }
 
@@ -44,7 +45,7 @@ export class OverlayEngine {
 
     this.state.injected = true;
     this.state.lastUpdateAt = Date.now();
-    console.log('[Overlay] Injected successfully');
+    logger.info('[Overlay] Injected successfully');
 
     return this.state;
   }
@@ -227,9 +228,9 @@ export class OverlayEngine {
   async kill(hyperion: Hyperion): Promise<void> {
     try {
       await hyperion.eval('window.__HY_OVERLAY_KILL?.()');
-      console.log('[Overlay] Killed successfully');
+      logger.info('[Overlay] Killed successfully');
     } catch (err) {
-      console.warn('[Overlay] Kill error:', err);
+      logger.warn({ err }, '[Overlay] Kill error');
     }
     this.state.injected = false;
     this.state.elementCount = 0;

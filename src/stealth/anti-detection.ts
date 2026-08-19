@@ -1,4 +1,5 @@
 import { ConnectionManager } from '../connection'
+import { logger } from '../core/logger'
 
 export interface StealthOptions {
   runtimeEnable: boolean
@@ -19,14 +20,18 @@ export class AntiDetection {
     if (options.automationOverride) {
       try {
         await this.cxn.call('Emulation.setAutomationOverride', { enabled: true })
-      } catch {}
+      } catch (err) {
+        logger.debug({ err }, 'stealth override failed (automationOverride)')
+      }
     }
 
     // 2. Focus emulation (tabs in background not throttled)
     if (options.focusEmulation) {
       try {
         await this.cxn.call('Emulation.setFocusEmulationEnabled', { enabled: true })
-      } catch {}
+      } catch (err) {
+        logger.debug({ err }, 'stealth override failed (focusEmulation)')
+      }
     }
 
     // 3. User agent override (if specified)
@@ -35,28 +40,36 @@ export class AntiDetection {
         await this.cxn.call('Emulation.setUserAgentOverride', {
           userAgent: options.userAgent
         })
-      } catch {}
+      } catch (err) {
+        logger.debug({ err }, 'stealth override failed (userAgent)')
+      }
     }
 
     // 4. Locale override
     if (options.locale) {
       try {
         await this.cxn.call('Emulation.setLocaleOverride', { locale: options.locale })
-      } catch {}
+      } catch (err) {
+        logger.debug({ err }, 'stealth override failed (locale)')
+      }
     }
 
     // 5. Timezone override
     if (options.timezone) {
       try {
         await this.cxn.call('Emulation.setTimezoneOverride', { timezoneId: options.timezone })
-      } catch {}
+      } catch (err) {
+        logger.debug({ err }, 'stealth override failed (timezone)')
+      }
     }
 
     // 6. Geolocation override
     if (options.geolocation) {
       try {
         await this.cxn.call('Emulation.setGeolocationOverride', options.geolocation)
-      } catch {}
+      } catch (err) {
+        logger.debug({ err }, 'stealth override failed (geolocation)')
+      }
     }
 
     // 7. Runtime.enable is intentionally NOT called
@@ -75,7 +88,9 @@ export class AntiDetection {
           // No other modifications
         `
       })
-    } catch {}
+    } catch (err) {
+      logger.debug({ err }, 'stealth override failed (addScriptToEvaluateOnNewDocument)')
+    }
 
     if (options.zeroJSPatches) {
       // Remove the script we just added (it had no content anyway)
@@ -87,12 +102,18 @@ export class AntiDetection {
   async cleanup(): Promise<void> {
     try {
       await this.cxn.call('Emulation.setAutomationOverride', { enabled: false })
-    } catch {}
+    } catch (err) {
+      logger.debug({ err }, 'stealth cleanup failed (automationOverride)')
+    }
     try {
       await this.cxn.call('Emulation.setFocusEmulationEnabled', { enabled: false })
-    } catch {}
+    } catch (err) {
+      logger.debug({ err }, 'stealth cleanup failed (focusEmulation)')
+    }
     try {
       await this.cxn.call('Emulation.clearDeviceMetricsOverride')
-    } catch {}
+    } catch (err) {
+      logger.debug({ err }, 'stealth cleanup failed (clearDeviceMetricsOverride)')
+    }
   }
 }

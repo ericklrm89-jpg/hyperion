@@ -8,6 +8,7 @@ import { Hyperion } from './hyperion';
 import { LLMServer } from './mcp/LLMServer';
 import { MCPServerAdapter } from './mcp/MCPServerAdapter';
 import { ConnectionMode } from './config';
+import { logger } from './core/logger';
 
 interface CLIArgs {
   mode: ConnectionMode;
@@ -120,20 +121,20 @@ async function main() {
       verbose: cliArgs.verbose,
     });
 
-    console.log(`[Hyperion V2] Connecting (mode: ${cliArgs.mode})...`);
+    logger.info({ mode: cliArgs.mode }, `[Hyperion V2] Connecting (mode: ${cliArgs.mode})...`);
     await hyperion.connect();
-    console.log('[Hyperion V2] Connected');
+    logger.info('[Hyperion V2] Connected');
 
     if (cliArgs.mcpMode) {
       // MCP Server mode
       const llmServer = new LLMServer(hyperion);
       const mcpAdapter = new MCPServerAdapter(llmServer);
       await mcpAdapter.start();
-      console.log('[Hyperion V2] MCP Server started on stdio');
+      logger.info('[Hyperion V2] MCP Server started on stdio');
 
       // Keep alive
       process.on('SIGINT', async () => {
-        console.log('[Hyperion V2] Shutting down...');
+        logger.info('[Hyperion V2] Shutting down...');
         await mcpAdapter.stop();
         await hyperion.disconnect();
         process.exit(0);
@@ -175,8 +176,7 @@ async function main() {
       prompt();
     }
   } catch (err: any) {
-    console.error('[Hyperion V2] Fatal error:', err.message);
-    if (process.env.VERBOSE) console.error(err.stack);
+    logger.error({ err: err.message, stack: err.stack }, '[Hyperion V2] Fatal error');
     process.exit(1);
   }
 }

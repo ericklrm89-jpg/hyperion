@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ActionDefinition, ActionExecution, ActionAttempt } from './types';
+import { logger } from './logger';
 
 /**
  * Validation error with schema context
@@ -45,7 +46,7 @@ export class ActionRegistry {
       throw new Error(`Action ${def.id} already registered`);
     }
     this.actions.set(def.id, def);
-    console.log(`[ActionRegistry] Registered: ${def.id} - ${def.name}`);
+    logger.info({ actionId: def.id, name: def.name }, `[ActionRegistry] Registered: ${def.id} - ${def.name}`);
   }
 
   /**
@@ -86,7 +87,7 @@ export class ActionRegistry {
       retriedCount: 0,
     };
 
-    console.log(`[Action] Starting: ${actionId} (${executionId})`);
+    logger.info({ actionId, executionId }, `[Action] Starting: ${actionId} (${executionId})`);
 
     // Screenshot BEFORE
     if (options?.captureScreenshots && options?.beforeScreenshot) {
@@ -99,7 +100,7 @@ export class ActionRegistry {
           sizeBytes: screenshot.length,
         });
       } catch (err) {
-        console.warn('[Action] Failed to capture before screenshot:', err);
+        logger.warn({ err, actionId }, '[Action] Failed to capture before screenshot');
       }
     }
 
@@ -116,7 +117,7 @@ export class ActionRegistry {
           execution.status = 'retrying';
           execution.retriedCount++;
           execution.retried = true;
-          console.log(`[Action] Retrying ${actionId} (attempt ${attempt}/${retryPolicy.maxAttempts})`);
+          logger.info({ actionId, attempt, maxAttempts: retryPolicy.maxAttempts }, `[Action] Retrying ${actionId} (attempt ${attempt}/${retryPolicy.maxAttempts})`);
         }
 
         // Timeout promise race
@@ -140,7 +141,7 @@ export class ActionRegistry {
           result,
         });
 
-        console.log(`[Action] Success: ${actionId} (${Date.now() - attemptStart}ms)`);
+        logger.info({ actionId, durationMs: Date.now() - attemptStart }, `[Action] Success: ${actionId} (${Date.now() - attemptStart}ms)`);
         break;
       } catch (err: any) {
         lastError = err;
@@ -182,7 +183,7 @@ export class ActionRegistry {
           sizeBytes: screenshot.length,
         });
       } catch (err) {
-        console.warn('[Action] Failed to capture after screenshot:', err);
+        logger.warn({ err, actionId }, '[Action] Failed to capture after screenshot');
       }
     }
 
@@ -194,7 +195,7 @@ export class ActionRegistry {
         message: lastError?.message || 'Unknown error',
         stack: lastError?.stack,
       };
-      console.error(`[Action] Failed: ${actionId} - ${lastError?.message}`);
+      logger.error({ actionId, err: lastError }, `[Action] Failed: ${actionId} - ${lastError?.message}`);
     }
 
     execution.completedAt = Date.now();
@@ -210,7 +211,7 @@ export class ActionRegistry {
       try {
         fn(execution);
       } catch (err) {
-        console.warn('[ActionRegistry] Listener error:', err);
+        logger.warn({ err }, '[ActionRegistry] Listener error');
       }
     });
 

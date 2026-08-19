@@ -106,7 +106,6 @@ export class NavigatePrimitive {
     return new Promise((resolve, reject) => {
       let pending = 0
       let lastActivity = Date.now()
-      let checkInterval: any
 
       const onRequest = () => { pending++; lastActivity = Date.now() }
       const onResponse = () => { pending--; lastActivity = Date.now() }
@@ -116,13 +115,6 @@ export class NavigatePrimitive {
       this.cxn.on('Network.responseReceived', onResponse)
       this.cxn.on('Network.loadingFailed', onFailed)
 
-      checkInterval = setInterval(() => {
-        if (pending <= 0 && Date.now() - lastActivity >= idleMs) {
-          cleanup()
-          resolve()
-        }
-      }, 200)
-
       const cleanup = () => {
         clearInterval(checkInterval)
         clearTimeout(timeoutId)
@@ -130,6 +122,13 @@ export class NavigatePrimitive {
         this.cxn.removeListener('Network.responseReceived', onResponse)
         this.cxn.removeListener('Network.loadingFailed', onFailed)
       }
+
+      const checkInterval = setInterval(() => {
+        if (pending <= 0 && Date.now() - lastActivity >= idleMs) {
+          cleanup()
+          resolve()
+        }
+      }, 200)
 
       const timeoutId = setTimeout(() => {
         cleanup()

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { Hyperion } from '../hyperion';
 import { VisionFrame } from '../core/types';
+import { logger } from '../core/logger';
 
 /**
  * Platform detection
@@ -38,13 +39,13 @@ export class VisionEngine extends EventEmitter {
    */
   async startStreaming(intervalMs = 1000, maxFrames = 100): Promise<void> {
     if (this.streaming) {
-      console.warn('[Vision] Already streaming');
+      logger.warn('[Vision] Already streaming');
       return;
     }
 
     this.streaming = true;
     this.maxFrames = maxFrames;
-    console.log(`[Vision] Started streaming (interval: ${intervalMs}ms, maxFrames: ${maxFrames})`);
+    logger.info(`[Vision] Started streaming (interval: ${intervalMs}ms, maxFrames: ${maxFrames})`);
 
     while (this.streaming) {
       try {
@@ -83,7 +84,7 @@ export class VisionEngine extends EventEmitter {
    */
   stopStreaming(): void {
     this.streaming = false;
-    console.log('[Vision] Stopped streaming');
+    logger.info('[Vision] Stopped streaming');
   }
 
   /**

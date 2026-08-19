@@ -6,6 +6,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import { logger } from '../core/logger';
 
 /**
  * MCP Server Adapter - Connects LLMServer to MCP protocol
@@ -58,7 +59,7 @@ export class MCPServerAdapter {
       const { name, arguments: args } = request.params;
 
       try {
-        console.log(`[MCP] Calling tool: ${name}`, args);
+        logger.info({ tool: name, args }, `[MCP] Calling tool: ${name}`);
 
         const execution = await this.llmServer.executeAction(name, args || {});
 
@@ -91,7 +92,7 @@ export class MCPServerAdapter {
           ],
         };
       } catch (err: any) {
-        console.error(`[MCP] Tool error: ${name}`, err);
+        logger.error({ err, tool: name }, `[MCP] Tool error: ${name}`);
         return {
           isError: true,
           content: [
@@ -106,22 +107,24 @@ export class MCPServerAdapter {
   }
 
   /**
-   * Convert Zod schema to JSON schema for MCP
+   * Convert Zod schema to JSON schema
    */
   private zodToJsonSchema(schema: any): any {
     try {
-      const description = schema.describe?.();
-      if (!description) return { type: 'object', properties: {} };
+      if (!schema || !schema._def) {
+        return { type: 'object', properties: {} };
+      }
 
-      // Simple conversion
+      const shape = schema._def.shape?.() || {};
       const properties: any = {};
       const required: string[] = [];
 
-      if (description.type === 'ZodObject' && description.shape) {
-        for (const [key, field] of Object.entries(description.shape)) {
-          const fieldDesc = (field as any).describe?.();
-          properties[key] = this.fieldToJsonSchema(fieldDesc);
-          if (!fieldDesc?.optional) required.push(key);
+      for (const [key, value] of Object.entries(shape)) {
+        const field = value as any;
+        properties[key] = this.fieldToJsonSchema(field);
+
+        if (!field.isOptional?.()) {
+          required.push(key);
         }
       }
 
@@ -131,7 +134,7 @@ export class MCPServerAdapter {
         required,
       };
     } catch (err) {
-      console.warn('Schema conversion error, returning default:', err);
+      logger.warn({ err }, 'Schema conversion error, returning default');
       return { type: 'object', properties: {} };
     }
   }
@@ -179,7 +182,7 @@ export class MCPServerAdapter {
   async start(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.log('[MCP] Server started on stdio');
+    logger.info('[MCP] Server started on stdio');
   }
 
   /**
@@ -187,6 +190,6 @@ export class MCPServerAdapter {
    */
   async stop(): Promise<void> {
     await this.server.close();
-    console.log('[MCP] Server stopped');
+    logger.info('[MCP] Server stopped');
   }
 }
