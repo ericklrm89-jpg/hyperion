@@ -1,6 +1,7 @@
 /**
  * HYPERION INTERACTIVE PROFILE & MULTI-PORT SUPERVISOR
- * Selector interactivo de perfil real y puerto CDP personalizado (9001, 9222..9240).
+ * True Multi-Instance Parallel Browser Launcher with Dynamic Port Allocation.
+ * Supports simultaneous concurrent sessions (e.g. 9001 + 9002) with profile cloning.
  */
 const fs = require('fs');
 const path = require('path');
@@ -37,6 +38,28 @@ function cleanProfileLocks(dir) {
       }
     } catch (e) {}
   }
+}
+
+function seedProfileIfNew(sourceUserDataDir, profileDir, targetUserDataDir) {
+  try {
+    const targetDir = path.join(targetUserDataDir, profileDir);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+      const sourceDir = path.join(sourceUserDataDir, profileDir);
+      if (fs.existsSync(sourceDir)) {
+        const criticalItems = ['Preferences', 'Secure Preferences', 'Cookies', 'Login Data', 'Web Data', 'Network', 'Local Storage'];
+        for (const item of criticalItems) {
+          const srcItem = path.join(sourceDir, item);
+          const dstItem = path.join(targetDir, item);
+          if (fs.existsSync(srcItem)) {
+            try {
+              fs.cpSync(srcItem, dstItem, { recursive: true, errorOnExist: false });
+            } catch (e) {}
+          }
+        }
+      }
+    }
+  } catch (e) {}
 }
 
 function queryCdpTabs(port) {
@@ -144,7 +167,7 @@ async function main() {
   });
   console.log('└─────┴─────────────────┴──────────────────────┴────────────────────────────────┴────────────────────────────┘\n');
 
-  // Encontrar el primer perfil disponible o el último usado
+  // Encontrar el primer perfil disponible
   const availableProfileIdx = profiles.findIndex(p => {
     const isBusy = activeSessions.some(s => 
       s.userDataDir.toLowerCase() === p.userDataDir.toLowerCase() &&
@@ -176,7 +199,7 @@ async function main() {
   const selected = profiles[selectedIndex];
   
   // 2. SUGERENCIA Y ELECCIÓN MANUAL DEL PUERTO CDP
-  const suggestedPort = await PortSessionManager.findNextAvailablePort(9222, 9240);
+  const suggestedPort = await PortSessionManager.findNextAvailablePort(9001, 9040);
   console.log(`\n🔌 Puerto CDP sugerido: ${suggestedPort}`);
   const portAnswer = (await question(`👉 Ingresa el Puerto CDP [Enter para ${suggestedPort}]: `)).trim();
 
@@ -188,21 +211,28 @@ async function main() {
     }
   }
 
-  console.log(`\n🚀 Iniciando ${selected.browser} con Perfil Real "${selected.name}" en Puerto CDP: ${targetPort}...`);
+  console.log(`\n🚀 Iniciando ${selected.browser} con Perfil "${selected.name}" en Puerto CDP: ${targetPort}...`);
   saveLastProfile(selected);
 
-  // 3. Limpiar procesos huérfanos y bloqueos del perfil real para permitir enlace de puerto
-  const isPortLive = await PortSessionManager.isPortInUse(targetPort);
-  if (!isPortLive) {
+  // 3. Determinar directorio de datos y gestión de aislamiento multi-instancia
+  let effectiveUserDataDir = selected.userDataDir;
+  
+  if (activeSessions.length > 0) {
+    // Es una segunda o tercera instancia en paralelo: aislar directorio para que Chrome permita múltiples procesos concurrentes
+    effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
+    seedProfileIfNew(selected.userDataDir, selected.profileDir, effectiveUserDataDir);
+    cleanProfileLocks(effectiveUserDataDir);
+  } else {
+    // Es la primera instancia activa: limpiar posibles procesos huérfanos antes de iniciar
     try {
       execSync('taskkill /f /im chrome.exe /im msedge.exe /im brave.exe >nul 2>&1', { stdio: 'ignore' });
     } catch (e) {}
+    cleanProfileLocks(selected.userDataDir);
   }
-  cleanProfileLocks(selected.userDataDir);
 
   const chromeFlags = [
     `--remote-debugging-port=${targetPort}`,
-    `--user-data-dir="${selected.userDataDir}"`,
+    `--user-data-dir="${effectiveUserDataDir}"`,
     `--profile-directory="${selected.profileDir}"`,
     '--no-first-run',
     '--restore-last-session',
@@ -225,7 +255,7 @@ async function main() {
     profileDir: selected.profileDir,
     profileName: selected.name,
     userDataDir: selected.userDataDir,
-    isolatedDataDir: selected.userDataDir,
+    isolatedDataDir: effectiveUserDataDir,
     pid: process.pid,
     startedAt: new Date().toISOString(),
     wsUrl: `ws://127.0.0.1:${targetPort}`
