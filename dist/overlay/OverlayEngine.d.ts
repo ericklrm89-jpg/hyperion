@@ -2,6 +2,7 @@ import { Hyperion } from '../hyperion';
 import { OverlayState } from '../core/types';
 /**
  * Overlay Engine - High-contrast multicolor dynamic element mapping (Capa Manus)
+ * Comprehensive recognition for WhatsApp Web, Instagram, Facebook, TikTok, and modern SPAs
  */
 export declare class OverlayEngine {
     private state;
