@@ -41,5 +41,9 @@ jobs:
       - name: Run Linter
         run: npm run lint
 
+      - name: Guard against unverified actions (Anti-Self-Deception)
+        run: node scripts/ci/guard-verified-actions.js
+
       - name: Run Tests
         run: npm run test
+

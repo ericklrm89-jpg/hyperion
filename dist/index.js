@@ -32,6 +32,7 @@ exports.createOverlayEngine = createOverlayEngine;
 __exportStar(require("./core/types"), exports);
 __exportStar(require("./core/ActionRegistry"), exports);
 __exportStar(require("./core/logger"), exports);
+__exportStar(require("./core/verifyWithVision"), exports);
 // Connection & Resilience
 __exportStar(require("./connection/resilience/HeartbeatManager"), exports);
 __exportStar(require("./connection/resilience/ReconnectionManager"), exports);

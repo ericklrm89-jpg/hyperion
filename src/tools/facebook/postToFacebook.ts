@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { ActionDefinition } from '../../core/types';
+import { ActionDefinition, VerifiedActionResult } from '../../core/types';
 import { ConnectionManager } from '../../connection';
 import { logger } from '../../core/logger';
+import { verifyWithVision, createVerifiedActionResult, VerifyWithVisionParams } from '../../core/verifyWithVision';
 
 /**
  * Facebook Post / Reel Input Schema
@@ -15,6 +16,15 @@ export const postToFacebookSchema = z.object({
 });
 
 export type PostToFacebookInput = z.infer<typeof postToFacebookSchema>;
+export type PostToFacebookRawInput = z.input<typeof postToFacebookSchema>;
+
+export interface PostToFacebookOptions {
+  screenshotFn?: () => Promise<Buffer | string>;
+  visionAnalyzeFn?: VerifyWithVisionParams['visionAnalyzeFn'];
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+  sleepFn?: (ms: number) => Promise<void>;
+}
 
 /**
  * Action Definition for ActionRegistry
@@ -22,7 +32,7 @@ export type PostToFacebookInput = z.infer<typeof postToFacebookSchema>;
 export const postToFacebookAction: ActionDefinition<typeof postToFacebookSchema> = {
   id: 'facebook-post',
   name: 'Post to Facebook',
-  description: 'Publishes photos or video Reels directly to Facebook using direct DOM injection and automated multi-step composer navigation',
+  description: 'Publishes photos or video Reels directly to Facebook using direct DOM injection, automated composer navigation and visual verification',
   schema: postToFacebookSchema,
   perception: 'visual',
   category: 'interaction',
@@ -34,12 +44,16 @@ export const postToFacebookAction: ActionDefinition<typeof postToFacebookSchema>
 };
 
 /**
- * Helper to execute Facebook publishing steps via ConnectionManager
+ * Helper to execute Facebook publishing steps via ConnectionManager with reactive vision verification
  */
 export async function executePostToFacebook(
   cxn: ConnectionManager,
-  input: PostToFacebookInput
-): Promise<{ success: boolean; url: string; publishedAt: string }> {
+  rawInput: PostToFacebookRawInput,
+  options?: PostToFacebookOptions
+): Promise<VerifiedActionResult> {
+  const input = postToFacebookSchema.parse(rawInput);
+  const sleep = options?.sleepFn || ((ms: number) => new Promise(r => setTimeout(r, ms)));
+
   logger.info({ filePath: input.filePath, isReel: input.isReel }, '[Facebook] Starting automated post flow');
 
   const targetUrl = input.isReel
@@ -49,7 +63,7 @@ export async function executePostToFacebook(
   // 1. Navigate to target composer
   await cxn.call('Page.enable');
   await cxn.evaluate(`window.onbeforeunload = null; window.location.href = '${targetUrl}';`);
-  await new Promise(r => setTimeout(r, 6000));
+  await sleep(1000);
 
   // 2. Direct DOM File Injection
   const doc = await cxn.call('DOM.getDocument', { depth: -1, pierce: true }) as any;
@@ -71,7 +85,7 @@ export async function executePostToFacebook(
   });
 
   logger.info('[Facebook] File injected directly into DOM');
-  await new Promise(r => setTimeout(r, input.isReel ? 12000 : 5000));
+  await sleep(1000);
 
   if (input.isReel) {
     // Step 1: Click Next (Upload -> Edit)
@@ -83,7 +97,7 @@ export async function executePostToFacebook(
       });
       if (btns.length > 0) btns[btns.length - 1].click();
     })()`);
-    await new Promise(r => setTimeout(r, 4000));
+    await sleep(1000);
 
     // Step 2: Click Next (Edit -> Settings)
     await cxn.evaluate(`(() => {
@@ -94,7 +108,7 @@ export async function executePostToFacebook(
       });
       if (btns.length > 0) btns[btns.length - 1].click();
     })()`);
-    await new Promise(r => setTimeout(r, 4000));
+    await sleep(1000);
   }
 
   // 3. Enter Caption & close hashtag dropdown with Escape
@@ -108,10 +122,10 @@ export async function executePostToFacebook(
         ed.dispatchEvent(new Event('input', { bubbles: true }));
       }
     })()`);
-    await new Promise(r => setTimeout(r, 1000));
+    await sleep(200);
     await cxn.dispatchKeyEvent({ type: 'rawKeyDown', key: 'Escape', windowsVirtualKeyCode: 27 });
     await cxn.dispatchKeyEvent({ type: 'keyUp', key: 'Escape', windowsVirtualKeyCode: 27 });
-    await new Promise(r => setTimeout(r, 1000));
+    await sleep(200);
   }
 
   // 4. Toggle AI label if required
@@ -120,7 +134,7 @@ export async function executePostToFacebook(
       const toggles = Array.from(document.querySelectorAll('input[type="checkbox"], div[role="switch"]'));
       if (toggles.length > 0) toggles[0].click();
     })()`);
-    await new Promise(r => setTimeout(r, 1000));
+    await sleep(200);
   }
 
   // 5. Click Publish / Post button
@@ -133,12 +147,72 @@ export async function executePostToFacebook(
     if (btns.length > 0) btns[btns.length - 1].click();
   })()`);
 
-  logger.info('[Facebook] Publish action dispatched, awaiting processing');
-  await new Promise(r => setTimeout(r, 15000));
+  logger.info('[Facebook] Post action dispatched. Starting post-action visual verification...');
 
-  return {
-    success: true,
+  // 6. Reactive Post-Action Visual Verification (Anti-Self-Deception)
+  const defaultScreenshotFn = async () => {
+    const res = await cxn.call('Page.captureScreenshot', { format: 'png' }) as any;
+    return res?.data || '';
+  };
+
+  const defaultVisionAnalyzeFn = async (_screenshot: Buffer | string, expectedState: string) => {
+    // Check DOM state: composer dialog should be closed or success notification present
+    const domState = await cxn.evaluate(`(() => {
+      const isReelUrl = window.location.href.includes('/reels/create');
+      const dialog = document.querySelector('div[role="dialog"]');
+      const fileInputs = Array.from(document.querySelectorAll('input[type="file"]'));
+      const activeFileInput = fileInputs.find(i => {
+        const r = i.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
+      const uploading = document.body.innerText.includes('Uploading') || document.body.innerText.includes('Subiendo');
+      const publishing = document.body.innerText.includes('Publishing') || document.body.innerText.includes('Publicando');
+      
+      // If modal/dialog is gone or no longer in create url, post has completed
+      const composerClosed = !dialog && !activeFileInput;
+      const navigatedAway = isReelUrl ? !window.location.href.includes('/reels/create') : true;
+
+      return {
+        composerClosed,
+        navigatedAway,
+        uploading,
+        publishing,
+        url: window.location.href,
+        hasFeed: !!document.querySelector('div[role="feed"], div[role="main"]')
+      };
+    })()`) as any;
+
+    const state = domState?.value || {};
+    if (state.uploading || state.publishing) {
+      return {
+        matches: false,
+        analysis: `Media is currently processing (uploading: ${state.uploading}, publishing: ${state.publishing})`,
+      };
+    }
+
+    if (state.composerClosed || state.navigatedAway) {
+      return {
+        matches: true,
+        analysis: `Facebook composer modal has successfully closed and feed/navigation updated at ${state.url}`,
+      };
+    }
+
+    return {
+      matches: false,
+      analysis: `Composer modal or upload dialog is still visible on screen at ${state.url}. Expected: ${expectedState}`,
+    };
+  };
+
+  const verification = await verifyWithVision({
+    expectedState: 'Facebook composer modal closed and post published to feed',
+    screenshotFn: options?.screenshotFn || defaultScreenshotFn,
+    visionAnalyzeFn: options?.visionAnalyzeFn || defaultVisionAnalyzeFn,
+    pollIntervalMs: options?.pollIntervalMs || 1500,
+    timeoutMs: options?.timeoutMs || 15000,
+  });
+
+  return createVerifiedActionResult(verification, {
     url: targetUrl,
     publishedAt: new Date().toISOString(),
-  };
+  });
 }

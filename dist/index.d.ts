@@ -11,6 +11,7 @@
 export * from './core/types';
 export * from './core/ActionRegistry';
 export * from './core/logger';
+export * from './core/verifyWithVision';
 export * from './connection/resilience/HeartbeatManager';
 export * from './connection/resilience/ReconnectionManager';
 export * from './connection/resilience/ConnectionPool';
@@ -21,7 +22,7 @@ export * from './overlay/OverlayEngine';
 export * from './mcp/LLMServer';
 export * from './mcp/MCPServerAdapter';
 export * from './hyperion';
-export type { ActionDefinition, ActionExecution, ActionAttempt, VisionFrame, OverlayState, ConnectionMetrics, Heartbeat, HeartbeatAck, RetryPolicy, HyperionError, } from './core/types';
+export type { ActionDefinition, ActionExecution, ActionAttempt, VisionFrame, OverlayState, ConnectionMetrics, Heartbeat, HeartbeatAck, RetryPolicy, HyperionError, VerifiedActionResult, } from './core/types';
 export declare function createHyperionServer(hyperion: any, options?: any): any;
 export declare function createActionRegistry(): any;
 export declare function createVisionEngine(hyperion: any, overlay?: any): any;

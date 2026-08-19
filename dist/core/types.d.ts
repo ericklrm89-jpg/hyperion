@@ -186,4 +186,19 @@ export interface HyperionError extends Error {
     retryable: boolean;
     details?: any;
 }
+/** Standard contract for actions with external side-effects (post, send, publish, delete) */
+export interface VerifiedActionResult {
+    success: boolean;
+    verified: boolean;
+    verificationMethod: 'vision' | 'dom-selector' | 'none';
+    evidence?: {
+        screenshotPath?: string;
+        screenshotBase64?: string;
+        visionAnalysis: string;
+        timestamp: string;
+    };
+    error?: string;
+    url?: string;
+    publishedAt?: string;
+}
 //# sourceMappingURL=types.d.ts.map

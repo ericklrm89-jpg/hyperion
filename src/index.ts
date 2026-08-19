@@ -13,6 +13,7 @@
 export * from './core/types';
 export * from './core/ActionRegistry';
 export * from './core/logger';
+export * from './core/verifyWithVision';
 
 // Connection & Resilience
 export * from './connection/resilience/HeartbeatManager';
@@ -48,6 +49,7 @@ export type {
   HeartbeatAck,
   RetryPolicy,
   HyperionError,
+  VerifiedActionResult,
 } from './core/types';
 
 // Export factory functions

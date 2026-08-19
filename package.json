@@ -18,6 +18,7 @@
     "test:integration": "jest --config jest.config.js --testMatch '**/tests/integration/**/*.test.ts'",
     "test:unit": "jest --config jest.config.js --testMatch '**/tests/unit/**/*.test.ts'",
     "lint": "eslint src/**/*.ts",
+    "guard:verified": "node scripts/ci/guard-verified-actions.js",
     "format": "prettier --write 'src/**/*.ts'",
     "extension:install": "node dist/native-host/install.js",
     "prepare": "husky"

@@ -194,3 +194,20 @@ export interface HyperionError extends Error {
   retryable: boolean;
   details?: any;
 }
+
+/** Standard contract for actions with external side-effects (post, send, publish, delete) */
+export interface VerifiedActionResult {
+  success: boolean;
+  verified: boolean; // true ONLY when verified by vision/DOM confirmation
+  verificationMethod: 'vision' | 'dom-selector' | 'none';
+  evidence?: {
+    screenshotPath?: string;
+    screenshotBase64?: string;
+    visionAnalysis: string; // analysis text/summary from perception engine
+    timestamp: string;
+  };
+  error?: string;
+  url?: string;
+  publishedAt?: string;
+}
+
