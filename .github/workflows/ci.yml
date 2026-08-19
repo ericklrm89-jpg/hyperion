@@ -26,6 +26,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Guard against scripts/ sprawl
+        run: |
+          SCRIPTS_COUNT=$(find scripts -maxdepth 2 -type f 2>/dev/null | wc -l)
+          echo "Current scripts count: $SCRIPTS_COUNT"
+          if [ "$SCRIPTS_COUNT" -gt 5 ]; then
+            echo "ERROR: Too many loose scripts in scripts/ ($SCRIPTS_COUNT > 5). Consolidate logic into src/ as ActionRegistry actions or move to archive/."
+            exit 1
+          fi
+
       - name: Build TypeScript
         run: npm run build
 
