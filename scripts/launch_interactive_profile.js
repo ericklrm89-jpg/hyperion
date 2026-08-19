@@ -1,10 +1,11 @@
 /**
- * HYPERION INTERACTIVE PROFILE & MULTI-PORT SUPERVISOR
- * True Multi-Instance Parallel Browser Launcher with Dynamic Port Allocation (9222..9240).
+ * HYPERION INTERACTIVE PROFILE & CUSTOM PORT SELECTOR
+ * Flexible Profile and Port selection with real-time live tab supervisor.
  */
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const net = require('net');
 const { spawn, execSync } = require('child_process');
 const readline = require('readline');
 const { ProfileScanner } = require('../dist/connection/resilience/ProfileScanner');
@@ -37,6 +38,17 @@ function cleanProfileLocks(dir) {
       }
     } catch (e) {}
   }
+}
+
+function checkTcpPort(port) {
+  return new Promise((resolve) => {
+    const s = net.createConnection({ host: '127.0.0.1', port }, () => {
+      s.destroy();
+      resolve(true);
+    });
+    s.on('error', () => resolve(false));
+    s.setTimeout(250, () => { s.destroy(); resolve(false); });
+  });
 }
 
 function queryCdpTabs(port) {
@@ -102,7 +114,7 @@ async function main() {
   console.log('║        HYPERION BROWSER — GESTOR DE INSTANCIAS Y PERFILES MULTI-PUERTO            ║');
   console.log('╚═══════════════════════════════════════════════════════════════════════════════════╝\n');
 
-  console.log('🔍 Escaneando navegadores, perfiles y puertos CDP activos (9222..9240)...\n');
+  console.log('🔍 Escaneando navegadores, perfiles y puertos CDP activos...\n');
   const profiles = ProfileScanner.scanAllProfiles();
   const activeSessions = await PortSessionManager.getActiveSessions();
 
@@ -114,9 +126,7 @@ async function main() {
     return;
   }
 
-  // Sort profiles by activeTime descending (most recent first)
   profiles.sort((a, b) => (b.activeTime || 0) - (a.activeTime || 0));
-
   const lastProfile = loadLastProfile();
 
   console.log('┌─────┬─────────────────┬──────────────────────┬────────────────────────────────┬────────────────────────────┐');
@@ -144,86 +154,57 @@ async function main() {
   });
   console.log('└─────┴─────────────────┴──────────────────────┴────────────────────────────────┴────────────────────────────┘\n');
 
-  // Encontrar el primer perfil disponible o el último usado si está libre
-  const availableProfileIdx = profiles.findIndex(p => {
-    const isBusy = activeSessions.some(s => 
-      s.userDataDir.toLowerCase() === p.userDataDir.toLowerCase() &&
-      s.profileDir.toLowerCase() === p.profileDir.toLowerCase()
-    );
-    return !isBusy;
-  });
-
-  const promptDefault = availableProfileIdx >= 0 ? availableProfileIdx + 1 : 1;
-
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   });
 
   const question = (query) => new Promise((resolve) => rl.question(query, resolve));
-  const answer = (await question(`👉 Selecciona el perfil a utilizar [1..${profiles.length}] (Enter para #${promptDefault}): `)).trim();
 
-  let selectedIndex = promptDefault - 1;
-  if (answer && !isNaN(Number(answer))) {
-    const parsed = Number(answer) - 1;
+  // 1. SELECCIÓN DE PERFIL
+  const promptDefaultProfile = 1;
+  const answerProfile = (await question(`👉 [1/2] Selecciona el perfil [1..${profiles.length}] (Enter para #${promptDefaultProfile}): `)).trim();
+
+  let selectedIndex = promptDefaultProfile - 1;
+  if (answerProfile && !isNaN(Number(answerProfile))) {
+    const parsed = Number(answerProfile) - 1;
     if (parsed >= 0 && parsed < profiles.length) {
       selectedIndex = parsed;
     }
   }
 
   const selected = profiles[selectedIndex];
-  const activeMatch = activeSessions.find(s => 
-    s.userDataDir.toLowerCase() === selected.userDataDir.toLowerCase() &&
-    s.profileDir.toLowerCase() === selected.profileDir.toLowerCase()
-  );
 
-  let targetPort = 9222;
-  let browserPid = null;
+  // 2. SELECCIÓN DE PUERTO CDP
+  // Sugerir el siguiente puerto libre automáticamente
+  let suggestedPort = 9222;
+  try {
+    suggestedPort = await PortSessionManager.findNextAvailablePort(9222, 9250);
+  } catch (e) {}
 
-  if (activeMatch) {
-    console.log(`\n⚠️  ATENCIÓN: El perfil "${selected.name}" YA ESTÁ ACTIVO en el puerto ${activeMatch.port}.`);
-    console.log('   [1] Conectar y supervisar la sesión existente (Puerto ' + activeMatch.port + ')');
-    console.log('   [2] Reiniciar navegador forzando el cierre previo');
-    
-    const choice = (await question('   Elige opción [1 o 2] (Enter para 1): ')).trim();
-    if (choice === '2') {
-      console.log('\n[1/3] Cerrando navegador previo para reiniciar perfil...');
-      try {
-        if (activeMatch.pid) {
-          process.kill(activeMatch.pid, 'SIGKILL');
-        }
-      } catch (e) {}
-      cleanProfileLocks(selected.userDataDir);
-      await PortSessionManager.releaseSession(activeMatch.port);
-      targetPort = activeMatch.port;
-    } else {
-      targetPort = activeMatch.port;
-    }
-  } else {
-    // Determine the next available free port (e.g. 9222, 9223, 9224...)
-    targetPort = await PortSessionManager.findNextAvailablePort(9222, 9240);
+  const answerPort = (await question(`👉 [2/2] Ingresa el Puerto CDP deseado (Enter para ${suggestedPort}): `)).trim();
+  let targetPort = suggestedPort;
+  if (answerPort && !isNaN(Number(answerPort))) {
+    targetPort = Number(answerPort);
   }
 
-  if (!activeMatch || choice === '2') {
-    console.log(`\n🚀 Iniciando ${selected.browser} con CDP en Puerto: ${targetPort}...`);
+  const portInUse = await checkTcpPort(targetPort);
+  if (portInUse) {
+    console.log(`\n⚠️  El puerto ${targetPort} ya está activo. Conectando como supervisor a la sesión existente...`);
+  } else {
+    console.log(`\n🚀 Iniciando ${selected.browser} con CDP en Puerto ${targetPort}...`);
     saveLastProfile(selected);
 
-    // 1. Limpiar bloqueos de perfil
+    // Limpiar bloqueos de perfil
     cleanProfileLocks(selected.userDataDir);
 
-    // 2. Si no hay ningún CDP vivo en el puerto 9222 y vamos a usar 9222, limpiar huérfanos
-    const port9222Alive = await PortSessionManager.isPortInUse(9222);
-    if (targetPort === 9222 && !port9222Alive) {
-      try {
-        execSync('taskkill /f /im chrome.exe /im msedge.exe /im brave.exe >nul 2>&1', { stdio: 'ignore' });
-      } catch (e) {}
-      cleanProfileLocks(selected.userDataDir);
-    }
-
-    // 3. Si no es el puerto 9222 o es una instancia paralela, usar directorio aislado
+    // Si es un puerto secundario (diferente a 9222), usar directorio de perfil aislado para permitir proceso paralelo
     let effectiveUserDataDir = selected.userDataDir;
     if (targetPort !== 9222) {
-      effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
+      effectiveUserDataDir = path.join(require('os').homedir(), '.hyperion', 'profiles', `chrome_port_${targetPort}`);
+      if (!fs.existsSync(effectiveUserDataDir)) {
+        fs.mkdirSync(effectiveUserDataDir, { recursive: true });
+      }
     }
 
     const args = [
@@ -232,8 +213,6 @@ async function main() {
       `--profile-directory=${selected.profileDir}`,
       '--no-first-run',
       '--restore-last-session',
-      '--no-sandbox',
-      '--test-type',
       'https://mail.google.com',
       'https://web.whatsapp.com',
       'https://www.instagram.com',
@@ -245,9 +224,7 @@ async function main() {
       stdio: 'ignore',
     });
     child.unref();
-    browserPid = child.pid;
 
-    // 4. Registrar sesión activa
     await PortSessionManager.registerSession({
       port: targetPort,
       browser: selected.browser,
@@ -255,17 +232,16 @@ async function main() {
       profileName: selected.name,
       userDataDir: selected.userDataDir,
       isolatedDataDir: effectiveUserDataDir,
-      pid: browserPid,
+      pid: child.pid,
       startedAt: new Date().toISOString(),
       wsUrl: `ws://127.0.0.1:${targetPort}`
     });
   }
 
-  // Esperar a que el puerto responda
-  await new Promise(r => setTimeout(r, 2500));
+  // Esperar a que el navegador levante el endpoint
+  await new Promise(r => setTimeout(r, 2000));
   let initialTabs = await queryCdpTabs(targetPort);
 
-  // DIBUJAR DASHBOARD PERSISTENTE
   drawPersistentDashboard(selected, targetPort, initialTabs);
 
   // Monitor continuo cada 3 segundos
@@ -281,7 +257,6 @@ async function main() {
     process.exit(0);
   };
 
-  // Manejo de comandos interactivos en la ventana persistente
   rl.on('line', async (line) => {
     const cmd = line.trim().toLowerCase();
     if (cmd === 'q') {
@@ -292,7 +267,6 @@ async function main() {
     }
   });
 
-  // Limpieza al recibir SIGINT (Ctrl + C) o cierre de proceso
   process.on('SIGINT', cleanupAndExit);
   process.on('SIGTERM', cleanupAndExit);
   process.on('exit', () => {
