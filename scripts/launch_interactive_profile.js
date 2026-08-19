@@ -1,11 +1,11 @@
 /**
  * HYPERION INTERACTIVE PROFILE & MULTI-PORT SUPERVISOR
- * Guaranteed Windows Chrome launch via Start-Process + live CDP monitoring.
+ * True Multi-Instance Parallel Browser Launcher with Dynamic Port Allocation (9222..9240).
  */
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-const { execSync } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const readline = require('readline');
 const { ProfileScanner } = require('../dist/connection/resilience/ProfileScanner');
 const { PortSessionManager } = require('../dist/connection/resilience/PortSessionManager');
@@ -71,13 +71,13 @@ function drawPersistentDashboard(selected, port, tabs = []) {
   console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
   console.log(`║   • Navegador Activo   : ${selected.browser.padEnd(56)} ║`);
   console.log(`║   • Perfil en Uso      : ${(selected.name + ' (' + (selected.userName || selected.profileDir) + ')').padEnd(56)} ║`);
-  console.log(`║   • Carpeta Perfil     : ${selected.profileDir.padEnd(56)} ║`);
+  console.log(`║   • Directorio Perfil  : ${selected.profileDir.padEnd(56)} ║`);
   console.log(`║   • Pestañas Abiertas  : ${tabs.length.toString().padEnd(56)} ║`);
   console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
   console.log('║   📋 PESTAÑAS DETECTADAS EN VIVO:                                                 ║');
   
   if (tabs.length === 0) {
-    console.log('║      (Esperando apertura de páginas en el navegador...)                           ║');
+    console.log('║      (Conectando con navegador... esperando páginas)                              ║');
   } else {
     tabs.slice(0, 6).forEach((t, i) => {
       const title = (t.title || t.url || 'Sin título').slice(0, 70);
@@ -178,6 +178,7 @@ async function main() {
   );
 
   let targetPort = 9222;
+  let browserPid = null;
 
   if (activeMatch) {
     console.log(`\n⚠️  ATENCIÓN: El perfil "${selected.name}" YA ESTÁ ACTIVO en el puerto ${activeMatch.port}.`);
@@ -188,7 +189,9 @@ async function main() {
     if (choice === '2') {
       console.log('\n[1/3] Cerrando navegador previo para reiniciar perfil...');
       try {
-        execSync('taskkill /f /im chrome.exe /im msedge.exe /im brave.exe >nul 2>&1', { stdio: 'ignore' });
+        if (activeMatch.pid) {
+          process.kill(activeMatch.pid, 'SIGKILL');
+        }
       } catch (e) {}
       cleanProfileLocks(selected.userDataDir);
       await PortSessionManager.releaseSession(activeMatch.port);
@@ -208,7 +211,7 @@ async function main() {
     // 1. Limpiar bloqueos de perfil
     cleanProfileLocks(selected.userDataDir);
 
-    // 2. Si no hay ningún CDP vivo en el puerto 9222, asegurar que procesos huérfanos de Chrome no bloqueen
+    // 2. Si no hay ningún CDP vivo en el puerto 9222 y vamos a usar 9222, limpiar huérfanos
     const port9222Alive = await PortSessionManager.isPortInUse(9222);
     if (targetPort === 9222 && !port9222Alive) {
       try {
@@ -217,22 +220,34 @@ async function main() {
       cleanProfileLocks(selected.userDataDir);
     }
 
-    // 3. Determinar directorio de datos (si es puerto secundario 9223+, usar directorio aislado)
+    // 3. Si no es el puerto 9222 o es una instancia paralela, usar directorio aislado
     let effectiveUserDataDir = selected.userDataDir;
     if (targetPort !== 9222) {
       effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
     }
 
-    // 4. Lanzar con Start-Process de PowerShell (100% garantizado en Windows)
-    const psScript = `Start-Process "${selected.exe}" -ArgumentList "--remote-debugging-port=${targetPort}", "--user-data-dir=${effectiveUserDataDir}", "--profile-directory=${selected.profileDir}", "--no-first-run", "--restore-last-session", "https://mail.google.com", "https://web.whatsapp.com", "https://www.instagram.com", "https://www.facebook.com"`;
-    
-    try {
-      execSync(`powershell.exe -NoProfile -Command "${psScript.replace(/"/g, '\\"')}"`, { stdio: 'ignore' });
-    } catch (e) {
-      console.error('❌ Error al iniciar navegador con PowerShell:', e);
-    }
+    const args = [
+      `--remote-debugging-port=${targetPort}`,
+      `--user-data-dir=${effectiveUserDataDir}`,
+      `--profile-directory=${selected.profileDir}`,
+      '--no-first-run',
+      '--restore-last-session',
+      '--no-sandbox',
+      '--test-type',
+      'https://mail.google.com',
+      'https://web.whatsapp.com',
+      'https://www.instagram.com',
+      'https://www.facebook.com'
+    ];
 
-    // 5. Registrar sesión activa
+    const child = spawn(selected.exe, args, {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+    browserPid = child.pid;
+
+    // 4. Registrar sesión activa
     await PortSessionManager.registerSession({
       port: targetPort,
       browser: selected.browser,
@@ -240,6 +255,7 @@ async function main() {
       profileName: selected.name,
       userDataDir: selected.userDataDir,
       isolatedDataDir: effectiveUserDataDir,
+      pid: browserPid,
       startedAt: new Date().toISOString(),
       wsUrl: `ws://127.0.0.1:${targetPort}`
     });
