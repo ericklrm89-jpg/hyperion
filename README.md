@@ -51,32 +51,52 @@ HERMES       └─── Action Registry + Full Tracing
 src/
 ├── core/
 │   ├── types.ts                    ← Universal types (16 interfaces)
-│   └── ActionRegistry.ts           ← Action execution + tracing
+│   ├── ActionRegistry.ts           ← Action execution + tracing + retries
+│   └── logger.ts                   ← Structured pino logger (stderr-only for MCP)
 │
 ├── connection/
 │   ├── transport.ts                ← Base transport (CDP protocol)
 │   ├── resilience/
 │   │   ├── HeartbeatManager.ts     ← Health monitoring
-│   │   ├── ReconnectionManager.ts  ← Auto-reconnect + backoff
-│   │   ├── ConnectionPool.ts       ← Metrics + connection management
-│   │   └── ConnectionHealthCheck.ts
-│   ├── attach.ts                   ← WebSocket attach mode
+│   │   ├── ReconnectionManager.ts  ← Auto-reconnect + exponential backoff
+│   │   ├── ConnectionPool.ts       ← Metrics + connection pool
+│   │   └── ConnectionHealthCheck.ts← Transport liveness probe
+│   ├── attach.ts                   ← WebSocket attach mode (localhost:9222)
 │   ├── launch.ts                   ← Fresh Chrome launch
 │   └── extension.ts                ← Chrome extension mode
 │
 ├── vision/
-│   └── VisionEngine.ts             ← Real-time frame capture + analysis
+│   └── VisionEngine.ts             ← Real-time frame capture + change detection
 │
 ├── overlay/
-│   └── OverlayEngine.ts            ← Robust element mapping
+│   └── OverlayEngine.ts            ← Single-injection element mapping [0..N]
+│
+├── tools/
+│   └── facebook/
+│       └── postToFacebook.ts       ← Typed Facebook Reel & Post publisher
 │
 ├── mcp/
-│   ├── LLMServer.ts                ← 16+ registered actions
-│   └── MCPServerAdapter.ts         ← MCP protocol bridge
+│   ├── LLMServer.ts                ← 16+ registered actions with Zod schemas
+│   └── MCPServerAdapter.ts         ← Stdio MCP protocol adapter
 │
 ├── hyperion.ts                     ← Main client API
-└── cli.ts                          ← CLI entry point (MCP/interactive)
+└── cli.ts                          ← CLI entry point (MCP / Interactive / Tool runner)
+
+archive/                            ← Historial de prototipos DOM y scripts de testing
+├── facebook-legacy/
+├── instagram-legacy/
+├── tiktok-legacy/
+├── whatsapp-legacy/
+└── exploratory/
 ```
+
+## ⚠️ Términos de Servicio y Advertencia de Responsabilidad (ToS Risk)
+
+> [!WARNING]
+> **Aviso de cumplimiento normativo y políticas de plataformas:**
+> Hyperion es una suite de automatización e interfaz de control de navegador basada en el protocolo estándar Chrome DevTools (CDP) diseñada para investigación, testing de interfaces, accesibilidad y flujos de trabajo asistidos por IA en cuentas propias o bajo consentimiento explícito.
+> 
+> La automatización e interacción con plataformas de terceros como **FB**, **TT**, **IG** o **WA** puede estar sujeta a políticas de uso y Términos de Servicio (ToS) específicos de cada proveedor. El desarrollador y usuario final asumen la responsabilidad exclusiva de cumplir con las directrices de dichas plataformas, evitar envíos automatizados no solicitados y mantener un uso ético y legítimo.
 
 ## 🎯 Casos de Uso
 
