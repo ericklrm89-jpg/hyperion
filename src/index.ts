@@ -23,6 +23,9 @@ export * from './connection/resilience/ConnectionHealthCheck';
 // Vision Engine
 export * from './vision/VisionEngine';
 
+// Tools & Integrations
+export * from './tools/facebook/postToFacebook';
+
 // Overlay System
 export * from './overlay/OverlayEngine';
 

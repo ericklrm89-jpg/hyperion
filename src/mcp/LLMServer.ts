@@ -4,6 +4,7 @@ import { ActionRegistry } from '../core/ActionRegistry';
 import { VisionEngine } from '../vision/VisionEngine';
 import { OverlayEngine } from '../overlay/OverlayEngine';
 import { ActionDefinition } from '../core/types';
+import { postToFacebookAction, executePostToFacebook } from '../tools/facebook/postToFacebook';
 
 /**
  * LLM-Native Server Schema Definitions
@@ -247,6 +248,9 @@ export class LLMServer {
       timeout: 5000,
       category: 'utility',
     });
+
+    // FACEBOOK POST
+    this.registry.register(postToFacebookAction);
   }
 
   /**
@@ -402,6 +406,10 @@ export class LLMServer {
           return {
             result: result?.value || result,
           };
+        }
+
+        case 'facebook-post': {
+          return executePostToFacebook(this.hyperion.cxn, validated);
         }
 
         default:
