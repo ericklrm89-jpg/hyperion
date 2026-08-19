@@ -2,28 +2,37 @@
 title Hyperion - Interactive Browser Profile Selector (CDP 9222)
 
 :: ===================================================================
-:: 1. VERIFICAR PERMISOS DE ADMINISTRADOR
+:: 1. VERIFICAR SI YA SE TIENEN PRIVILEGIOS DE ADMINISTRADOR
 :: ===================================================================
-net session >nul 2>&1
-if %ERRORLEVEL% equ 0 goto :RUN_ADMIN
+>nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
+if '%errorlevel%' EQU '0' (
+    goto :RUN_SUPERVISOR
+) else (
+    goto :ELEVATE_UAC
+)
 
 :: ===================================================================
-:: 2. SOLICITAR ELEVACIÓN UAC (PROMPT DE WINDOWS)
+:: 2. SOLICITAR PERMISOS UAC MEDIANTE WINDOWS SHELL APPLICATION
 :: ===================================================================
+:ELEVATE_UAC
 echo ===================================================================
-echo   [Hyperion] Solicitando permisos de Administrador (UAC)...
+echo   [Hyperion] Solicitando permisos de Administrador a Windows...
 echo ===================================================================
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList '/k cd /d """%~dp0""" && node """%~dp0scripts\launch_interactive_profile.js"""" -Verb RunAs"
+echo Set UAC = CreateObject^("Shell.Application"^) > "%temp%\hyperion_uac.vbs"
+echo UAC.ShellExecute "cmd.exe", "/k cd /d ""%~dp0"" && node scripts\launch_interactive_profile.js", "", "runas", 1 >> "%temp%\hyperion_uac.vbs"
+
+"%temp%\hyperion_uac.vbs"
+del "%temp%\hyperion_uac.vbs" >nul 2>&1
 exit /b
 
 :: ===================================================================
-:: 3. EJECUCIÓN CON PRIVILEGIOS DE ADMINISTRADOR
+:: 3. EJECUCIÓN DEL SUPERVISOR EN MODO ADMINISTRADOR
 :: ===================================================================
-:RUN_ADMIN
+:RUN_SUPERVISOR
 cd /d "%~dp0"
 
-node "%~dp0scripts\launch_interactive_profile.js"
+node scripts\launch_interactive_profile.js
 
 if %ERRORLEVEL% neq 0 (
     echo.
