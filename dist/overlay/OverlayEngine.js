@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OverlayEngine = void 0;
+const logger_1 = require("../core/logger");
 /**
  * Overlay Engine - Robust element mapping with guaranteed single injection
  */
@@ -26,7 +27,7 @@ class OverlayEngine {
         if (alreadyInjected?.value) {
             this.state.injected = true;
             this.state.lastRefreshAt = Date.now();
-            console.log('[Overlay] Already injected, reusing');
+            logger_1.logger.info('[Overlay] Already injected, reusing');
             return this.state;
         }
         // Inject overlay script
@@ -34,7 +35,7 @@ class OverlayEngine {
         await hyperion.eval(injectionScript);
         this.state.injected = true;
         this.state.lastUpdateAt = Date.now();
-        console.log('[Overlay] Injected successfully');
+        logger_1.logger.info('[Overlay] Injected successfully');
         return this.state;
     }
     /**
@@ -214,10 +215,10 @@ class OverlayEngine {
     async kill(hyperion) {
         try {
             await hyperion.eval('window.__HY_OVERLAY_KILL?.()');
-            console.log('[Overlay] Killed successfully');
+            logger_1.logger.info('[Overlay] Killed successfully');
         }
         catch (err) {
-            console.warn('[Overlay] Kill error:', err);
+            logger_1.logger.warn({ err }, '[Overlay] Kill error');
         }
         this.state.injected = false;
         this.state.elementCount = 0;

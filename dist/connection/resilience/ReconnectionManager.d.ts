@@ -1,14 +1,14 @@
-export interface ReconnectionOptions {
+export interface ReconnectConfig {
     maxAttempts?: number;
     initialBackoffMs?: number;
     maxBackoffMs?: number;
     backoffMultiplier?: number;
-    onReconnectAttempt?: (attempt: number, maxAttempts: number, nextDelayMs: number) => void;
-    onReconnectSuccess?: (attemptsUsed: number, totalDurationMs: number) => void;
-    onReconnectFailed?: (attemptsUsed: number, totalDurationMs: number, lastError: Error) => void;
+    onReconnectAttempt?: (attempt: number, maxAttempts: number, backoffMs: number) => void;
+    onReconnectSuccess?: (attempts: number, durationMs: number) => void;
+    onReconnectFailed?: (attempts: number, durationMs: number, error: Error) => void;
 }
 /**
- * Reconnection Manager - Handles auto-reconnect with exponential backoff
+ * Reconnection Manager - Handles exponential backoff and connection recovery
  */
 export declare class ReconnectionManager {
     private maxAttempts;
@@ -18,11 +18,11 @@ export declare class ReconnectionManager {
     private reconnectCount;
     private lastReconnectAt;
     private callbacks;
-    constructor(options?: ReconnectionOptions);
+    constructor(config?: ReconnectConfig);
     /**
-     * Execute function with automatic reconnection
+     * Execute an async operation with automatic retry on network errors
      */
-    executeWithReconnect<T>(fn: () => Promise<T>, onReconnect?: () => Promise<void>): Promise<T>;
+    executeWithRetry<T>(fn: () => Promise<T>, onReconnect?: () => Promise<void>): Promise<T>;
     /**
      * Reset reconnection counter
      */

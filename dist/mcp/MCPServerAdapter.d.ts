@@ -11,7 +11,7 @@ export declare class MCPServerAdapter {
      */
     private setupHandlers;
     /**
-     * Convert Zod schema to JSON schema for MCP
+     * Convert Zod schema to JSON schema
      */
     private zodToJsonSchema;
     /**

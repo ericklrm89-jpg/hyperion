@@ -31,6 +31,7 @@ exports.createOverlayEngine = createOverlayEngine;
 // Core framework
 __exportStar(require("./core/types"), exports);
 __exportStar(require("./core/ActionRegistry"), exports);
+__exportStar(require("./core/logger"), exports);
 // Connection & Resilience
 __exportStar(require("./connection/resilience/HeartbeatManager"), exports);
 __exportStar(require("./connection/resilience/ReconnectionManager"), exports);
@@ -38,6 +39,8 @@ __exportStar(require("./connection/resilience/ConnectionPool"), exports);
 __exportStar(require("./connection/resilience/ConnectionHealthCheck"), exports);
 // Vision Engine
 __exportStar(require("./vision/VisionEngine"), exports);
+// Tools & Integrations
+__exportStar(require("./tools/facebook/postToFacebook"), exports);
 // Overlay System
 __exportStar(require("./overlay/OverlayEngine"), exports);
 // MCP/LLM Integration

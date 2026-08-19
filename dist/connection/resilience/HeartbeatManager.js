@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HeartbeatManager = void 0;
 const events_1 = require("events");
+const logger_1 = require("../../core/logger");
 /**
  * Heartbeat Manager - Monitors connection health
  * Sends periodic pings and detects silent failures
@@ -27,7 +28,7 @@ class HeartbeatManager extends events_1.EventEmitter {
         this.interval = setInterval(() => {
             this.sendHeartbeat().catch(err => {
                 this.missedCount++;
-                console.warn(`[Heartbeat] Missed (${this.missedCount}/${this.maxMissed}):`, err.message);
+                logger_1.logger.warn({ err: err.message, missedCount: this.missedCount, maxMissed: this.maxMissed }, `[Heartbeat] Missed (${this.missedCount}/${this.maxMissed})`);
                 if (this.missedCount >= this.maxMissed) {
                     this.emit('unhealthy', {
                         missedCount: this.missedCount,
@@ -37,7 +38,7 @@ class HeartbeatManager extends events_1.EventEmitter {
                 }
             });
         }, intervalMs);
-        console.log(`[Heartbeat] Started (interval: ${intervalMs}ms, maxMissed: ${this.maxMissed})`);
+        logger_1.logger.info({ intervalMs, maxMissed: this.maxMissed }, `[Heartbeat] Started (interval: ${intervalMs}ms, maxMissed: ${this.maxMissed})`);
     }
     /**
      * Stop heartbeat interval
@@ -48,7 +49,7 @@ class HeartbeatManager extends events_1.EventEmitter {
             this.interval = undefined;
         }
         this.pendingHeartbeats.clear();
-        console.log('[Heartbeat] Stopped');
+        logger_1.logger.info('[Heartbeat] Stopped');
     }
     /**
      * Send single heartbeat and wait for ACK
@@ -61,27 +62,22 @@ class HeartbeatManager extends events_1.EventEmitter {
             clientId: this.clientId,
         };
         const sentAt = Date.now();
-        try {
-            const ack = await Promise.race([
-                this.sender(hb),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Heartbeat timeout after 5s')), 5000)),
-            ]);
-            const latency = Date.now() - sentAt;
-            this.lastHeartbeat = Date.now();
-            this.missedCount = 0;
-            this.emit('heartbeat-ok', {
-                sequenceNumber: this.sequenceNumber,
-                latencyMs: latency,
-            });
-            // Reset to healthy if was unhealthy
-            if (this.missedCount === 0) {
-                this.onHealthChange(true);
-            }
-            return ack;
+        const ack = await Promise.race([
+            this.sender(hb),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Heartbeat timeout after 5s')), 5000)),
+        ]);
+        const latency = Date.now() - sentAt;
+        this.lastHeartbeat = Date.now();
+        this.missedCount = 0;
+        this.emit('heartbeat-ok', {
+            sequenceNumber: this.sequenceNumber,
+            latencyMs: latency,
+        });
+        // Reset to healthy if was unhealthy
+        if (this.missedCount === 0) {
+            this.onHealthChange(true);
         }
-        catch (err) {
-            throw err;
-        }
+        return ack;
     }
     /**
      * Manual ACK handler (called by transport when response arrives)

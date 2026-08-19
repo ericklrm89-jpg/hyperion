@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VisionEngine = void 0;
 const events_1 = require("events");
+const logger_1 = require("../core/logger");
 /**
  * Platform detection
  */
@@ -38,12 +39,12 @@ class VisionEngine extends events_1.EventEmitter {
      */
     async startStreaming(intervalMs = 1000, maxFrames = 100) {
         if (this.streaming) {
-            console.warn('[Vision] Already streaming');
+            logger_1.logger.warn('[Vision] Already streaming');
             return;
         }
         this.streaming = true;
         this.maxFrames = maxFrames;
-        console.log(`[Vision] Started streaming (interval: ${intervalMs}ms, maxFrames: ${maxFrames})`);
+        logger_1.logger.info(`[Vision] Started streaming (interval: ${intervalMs}ms, maxFrames: ${maxFrames})`);
         while (this.streaming) {
             try {
                 const frame = await this.captureFrame();
@@ -74,7 +75,7 @@ class VisionEngine extends events_1.EventEmitter {
      */
     stopStreaming() {
         this.streaming = false;
-        console.log('[Vision] Stopped streaming');
+        logger_1.logger.info('[Vision] Stopped streaming');
     }
     /**
      * Capture single frame with full element detection

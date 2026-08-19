@@ -5,6 +5,7 @@ const zod_1 = require("zod");
 const ActionRegistry_1 = require("../core/ActionRegistry");
 const VisionEngine_1 = require("../vision/VisionEngine");
 const OverlayEngine_1 = require("../overlay/OverlayEngine");
+const postToFacebook_1 = require("../tools/facebook/postToFacebook");
 /**
  * LLM-Native Server Schema Definitions
  * All tools with Zod schemas for auto-documentation
@@ -214,6 +215,8 @@ class LLMServer {
             timeout: 5000,
             category: 'utility',
         });
+        // FACEBOOK POST
+        this.registry.register(postToFacebook_1.postToFacebookAction);
     }
     /**
      * Execute action by ID
@@ -354,6 +357,9 @@ class LLMServer {
                     return {
                         result: result?.value || result,
                     };
+                }
+                case 'facebook-post': {
+                    return (0, postToFacebook_1.executePostToFacebook)(this.hyperion.cxn, validated);
                 }
                 default:
                     throw new Error(`Action not implemented: ${actionId}`);

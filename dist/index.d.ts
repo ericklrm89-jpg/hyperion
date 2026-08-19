@@ -10,11 +10,13 @@
  */
 export * from './core/types';
 export * from './core/ActionRegistry';
+export * from './core/logger';
 export * from './connection/resilience/HeartbeatManager';
 export * from './connection/resilience/ReconnectionManager';
 export * from './connection/resilience/ConnectionPool';
 export * from './connection/resilience/ConnectionHealthCheck';
 export * from './vision/VisionEngine';
+export * from './tools/facebook/postToFacebook';
 export * from './overlay/OverlayEngine';
 export * from './mcp/LLMServer';
 export * from './mcp/MCPServerAdapter';

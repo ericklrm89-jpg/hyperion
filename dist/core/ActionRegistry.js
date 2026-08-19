@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ActionRegistry = exports.ValidationError = void 0;
+const logger_1 = require("./logger");
 /**
  * Validation error with schema context
  */
@@ -45,7 +46,7 @@ class ActionRegistry {
             throw new Error(`Action ${def.id} already registered`);
         }
         this.actions.set(def.id, def);
-        console.log(`[ActionRegistry] Registered: ${def.id} - ${def.name}`);
+        logger_1.logger.info({ actionId: def.id, name: def.name }, `[ActionRegistry] Registered: ${def.id} - ${def.name}`);
     }
     /**
      * Execute action with full tracing
@@ -75,7 +76,7 @@ class ActionRegistry {
             retried: false,
             retriedCount: 0,
         };
-        console.log(`[Action] Starting: ${actionId} (${executionId})`);
+        logger_1.logger.info({ actionId, executionId }, `[Action] Starting: ${actionId} (${executionId})`);
         // Screenshot BEFORE
         if (options?.captureScreenshots && options?.beforeScreenshot) {
             try {
@@ -88,7 +89,7 @@ class ActionRegistry {
                 });
             }
             catch (err) {
-                console.warn('[Action] Failed to capture before screenshot:', err);
+                logger_1.logger.warn({ err, actionId }, '[Action] Failed to capture before screenshot');
             }
         }
         // Execute with retry
@@ -102,7 +103,7 @@ class ActionRegistry {
                     execution.status = 'retrying';
                     execution.retriedCount++;
                     execution.retried = true;
-                    console.log(`[Action] Retrying ${actionId} (attempt ${attempt}/${retryPolicy.maxAttempts})`);
+                    logger_1.logger.info({ actionId, attempt, maxAttempts: retryPolicy.maxAttempts }, `[Action] Retrying ${actionId} (attempt ${attempt}/${retryPolicy.maxAttempts})`);
                 }
                 // Timeout promise race
                 const result = await Promise.race([
@@ -118,7 +119,7 @@ class ActionRegistry {
                     duration: Date.now() - attemptStart,
                     result,
                 });
-                console.log(`[Action] Success: ${actionId} (${Date.now() - attemptStart}ms)`);
+                logger_1.logger.info({ actionId, durationMs: Date.now() - attemptStart }, `[Action] Success: ${actionId} (${Date.now() - attemptStart}ms)`);
                 break;
             }
             catch (err) {
@@ -156,7 +157,7 @@ class ActionRegistry {
                 });
             }
             catch (err) {
-                console.warn('[Action] Failed to capture after screenshot:', err);
+                logger_1.logger.warn({ err, actionId }, '[Action] Failed to capture after screenshot');
             }
         }
         // Finalize
@@ -167,7 +168,7 @@ class ActionRegistry {
                 message: lastError?.message || 'Unknown error',
                 stack: lastError?.stack,
             };
-            console.error(`[Action] Failed: ${actionId} - ${lastError?.message}`);
+            logger_1.logger.error({ actionId, err: lastError }, `[Action] Failed: ${actionId} - ${lastError?.message}`);
         }
         execution.completedAt = Date.now();
         execution.duration = execution.completedAt - execution.startedAt;
@@ -181,7 +182,7 @@ class ActionRegistry {
                 fn(execution);
             }
             catch (err) {
-                console.warn('[ActionRegistry] Listener error:', err);
+                logger_1.logger.warn({ err }, '[ActionRegistry] Listener error');
             }
         });
         return execution;

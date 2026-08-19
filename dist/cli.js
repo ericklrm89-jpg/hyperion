@@ -41,6 +41,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const hyperion_1 = require("./hyperion");
 const LLMServer_1 = require("./mcp/LLMServer");
 const MCPServerAdapter_1 = require("./mcp/MCPServerAdapter");
+const logger_1 = require("./core/logger");
 /**
  * Parse CLI arguments
  */
@@ -136,18 +137,18 @@ async function main() {
             websocketUrl: cliArgs.websocketUrl,
             verbose: cliArgs.verbose,
         });
-        console.log(`[Hyperion V2] Connecting (mode: ${cliArgs.mode})...`);
+        logger_1.logger.info({ mode: cliArgs.mode }, `[Hyperion V2] Connecting (mode: ${cliArgs.mode})...`);
         await hyperion.connect();
-        console.log('[Hyperion V2] Connected');
+        logger_1.logger.info('[Hyperion V2] Connected');
         if (cliArgs.mcpMode) {
             // MCP Server mode
             const llmServer = new LLMServer_1.LLMServer(hyperion);
             const mcpAdapter = new MCPServerAdapter_1.MCPServerAdapter(llmServer);
             await mcpAdapter.start();
-            console.log('[Hyperion V2] MCP Server started on stdio');
+            logger_1.logger.info('[Hyperion V2] MCP Server started on stdio');
             // Keep alive
             process.on('SIGINT', async () => {
-                console.log('[Hyperion V2] Shutting down...');
+                logger_1.logger.info('[Hyperion V2] Shutting down...');
                 await mcpAdapter.stop();
                 await hyperion.disconnect();
                 process.exit(0);
@@ -186,9 +187,7 @@ async function main() {
         }
     }
     catch (err) {
-        console.error('[Hyperion V2] Fatal error:', err.message);
-        if (process.env.VERBOSE)
-            console.error(err.stack);
+        logger_1.logger.error({ err: err.message, stack: err.stack }, '[Hyperion V2] Fatal error');
         process.exit(1);
     }
 }
