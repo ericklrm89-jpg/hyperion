@@ -58,6 +58,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "events": "^3.3.0",
     "jpeg-js": "^0.4.4",
+    "pino": "^9.14.0",
     "pixelmatch": "^5.3.0",
     "pngjs": "^7.0.0",
     "uuid": "^9.0.0",

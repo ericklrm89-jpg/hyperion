@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { Heartbeat, HeartbeatAck } from '../../core/types';
+import { logger } from '../../core/logger';
 
 /**
  * Heartbeat Manager - Monitors connection health
@@ -36,7 +37,7 @@ export class HeartbeatManager extends EventEmitter {
     this.interval = setInterval(() => {
       this.sendHeartbeat().catch(err => {
         this.missedCount++;
-        console.warn(`[Heartbeat] Missed (${this.missedCount}/${this.maxMissed}):`, err.message);
+        logger.warn({ err: err.message, missedCount: this.missedCount, maxMissed: this.maxMissed }, `[Heartbeat] Missed (${this.missedCount}/${this.maxMissed})`);
 
         if (this.missedCount >= this.maxMissed) {
           this.emit('unhealthy', {
@@ -48,7 +49,7 @@ export class HeartbeatManager extends EventEmitter {
       });
     }, intervalMs);
 
-    console.log(`[Heartbeat] Started (interval: ${intervalMs}ms, maxMissed: ${this.maxMissed})`);
+    logger.info({ intervalMs, maxMissed: this.maxMissed }, `[Heartbeat] Started (interval: ${intervalMs}ms, maxMissed: ${this.maxMissed})`);
   }
 
   /**
@@ -60,7 +61,7 @@ export class HeartbeatManager extends EventEmitter {
       this.interval = undefined;
     }
     this.pendingHeartbeats.clear();
-    console.log('[Heartbeat] Stopped');
+    logger.info('[Heartbeat] Stopped');
   }
 
   /**

@@ -1,4 +1,5 @@
 import { ConnectionState } from '../../core/types';
+import { logger } from '../../core/logger';
 
 /**
  * Network error detection
@@ -10,27 +11,30 @@ function isNetworkError(err: any): boolean {
   return (
     message.includes('econnrefused') ||
     message.includes('econnreset') ||
-    message.includes('etimedout') ||
-    message.includes('ehostunreach') ||
-    message.includes('disconnected') ||
+    message.includes('epipe') ||
+    message.includes('timeout') ||
     message.includes('closed') ||
-    code.includes('ECONNREFUSED') ||
-    code.includes('ECONNRESET')
+    message.includes('socket') ||
+    message.includes('network') ||
+    code === 'econnrefused' ||
+    code === 'econnreset' ||
+    code === 'epipe' ||
+    code === 'etimedout'
   );
 }
 
-export interface ReconnectionOptions {
+export interface ReconnectConfig {
   maxAttempts?: number;
   initialBackoffMs?: number;
   maxBackoffMs?: number;
   backoffMultiplier?: number;
-  onReconnectAttempt?: (attempt: number, maxAttempts: number, nextDelayMs: number) => void;
-  onReconnectSuccess?: (attemptsUsed: number, totalDurationMs: number) => void;
-  onReconnectFailed?: (attemptsUsed: number, totalDurationMs: number, lastError: Error) => void;
+  onReconnectAttempt?: (attempt: number, maxAttempts: number, backoffMs: number) => void;
+  onReconnectSuccess?: (attempts: number, durationMs: number) => void;
+  onReconnectFailed?: (attempts: number, durationMs: number, error: Error) => void;
 }
 
 /**
- * Reconnection Manager - Handles auto-reconnect with exponential backoff
+ * Reconnection Manager - Handles exponential backoff and connection recovery
  */
 export class ReconnectionManager {
   private maxAttempts: number;
@@ -39,20 +43,20 @@ export class ReconnectionManager {
   private backoffMultiplier: number;
   private reconnectCount = 0;
   private lastReconnectAt = 0;
-  private callbacks: ReconnectionOptions;
+  private callbacks: ReconnectConfig;
 
-  constructor(options: ReconnectionOptions = {}) {
-    this.maxAttempts = options.maxAttempts || 10;
-    this.initialBackoffMs = options.initialBackoffMs || 1000;
-    this.maxBackoffMs = options.maxBackoffMs || 30000;
-    this.backoffMultiplier = options.backoffMultiplier || 1.5;
-    this.callbacks = options;
+  constructor(config: ReconnectConfig = {}) {
+    this.maxAttempts = config.maxAttempts || 5;
+    this.initialBackoffMs = config.initialBackoffMs || 1000;
+    this.maxBackoffMs = config.maxBackoffMs || 30000;
+    this.backoffMultiplier = config.backoffMultiplier || 2;
+    this.callbacks = config;
   }
 
   /**
-   * Execute function with automatic reconnection
+   * Execute an async operation with automatic retry on network errors
    */
-  async executeWithReconnect<T>(
+  async executeWithRetry<T>(
     fn: () => Promise<T>,
     onReconnect?: () => Promise<void>
   ): Promise<T> {
@@ -67,7 +71,7 @@ export class ReconnectionManager {
         if (attempt > 1) {
           const duration = Date.now() - startTime;
           this.callbacks.onReconnectSuccess?.(attempt - 1, duration);
-          console.log(`[Reconnect] Recovered after ${attempt - 1} attempts (${duration}ms)`);
+          logger.info({ attempts: attempt - 1, durationMs: duration }, `[Reconnect] Recovered after ${attempt - 1} attempts (${duration}ms)`);
         }
         return result;
       } catch (err: any) {
@@ -91,9 +95,9 @@ export class ReconnectionManager {
         this.reconnectCount++;
         this.lastReconnectAt = Date.now();
 
-        console.log(
-          `[Reconnect] Attempt ${attempt}/${this.maxAttempts} failed, ` +
-          `retrying in ${backoff}ms (${err.message})`
+        logger.info(
+          { attempt, maxAttempts: this.maxAttempts, backoffMs: backoff, err: err.message },
+          `[Reconnect] Attempt ${attempt}/${this.maxAttempts} failed, retrying in ${backoff}ms (${err.message})`
         );
 
         this.callbacks.onReconnectAttempt?.(attempt, this.maxAttempts, backoff);
@@ -106,7 +110,7 @@ export class ReconnectionManager {
           try {
             await onReconnect();
           } catch (reconnectErr: any) {
-            console.warn(`[Reconnect] Reconnection attempt failed:`, reconnectErr.message);
+            logger.warn({ err: reconnectErr.message }, `[Reconnect] Reconnection attempt failed`);
           }
         }
       }
@@ -115,7 +119,8 @@ export class ReconnectionManager {
     // All attempts exhausted
     const duration = Date.now() - startTime;
     this.callbacks.onReconnectFailed?.(this.maxAttempts, duration, lastError);
-    console.error(
+    logger.error(
+      { maxAttempts: this.maxAttempts, durationMs: duration, err: lastError.message },
       `[Reconnect] Failed after ${this.maxAttempts} attempts (${duration}ms): ${lastError.message}`
     );
 

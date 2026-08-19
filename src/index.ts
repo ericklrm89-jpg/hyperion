@@ -12,6 +12,7 @@
 // Core framework
 export * from './core/types';
 export * from './core/ActionRegistry';
+export * from './core/logger';
 
 // Connection & Resilience
 export * from './connection/resilience/HeartbeatManager';
