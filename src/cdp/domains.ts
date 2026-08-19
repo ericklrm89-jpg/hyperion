@@ -72,7 +72,7 @@ export const DOMAIN_METHODS: Record<Domain, string[]> = {
 
 export interface DomainState {
   enabled: boolean
-  eventListeners: Map<string, Set<Function>>
+  eventListeners: Map<string, Set<(...args: any[]) => void>>
 }
 
 export const DOMAIN_INIT_ORDER: { domain: Domain; required: boolean; stealthSafe: boolean }[] = [

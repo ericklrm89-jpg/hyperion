@@ -1,5 +1,7 @@
 # Hyperion V2 - LLM-Native Universal Web Agent
 
+[![CI](https://github.com/ericklrm89-jpg/hyperion/actions/workflows/ci.yml/badge.svg)](https://github.com/ericklrm89-jpg/hyperion/actions/workflows/ci.yml)
+
 **El navegador más poderoso para IA.** Servidor MCP universal que permite a **cualquier** agente de IA (Claude, Cursor, Cline, OpenCode, etc.) controlar Chrome real con 5 motores de percepción, heartbeat resiliente, y visión en tiempo real.
 
 ```

@@ -76,32 +76,28 @@ export class HeartbeatManager extends EventEmitter {
 
     const sentAt = Date.now();
 
-    try {
-      const ack = await Promise.race([
-        this.sender(hb),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Heartbeat timeout after 5s')), 5000)
-        ),
-      ]);
+    const ack = await Promise.race([
+      this.sender(hb),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Heartbeat timeout after 5s')), 5000)
+      ),
+    ]);
 
-      const latency = Date.now() - sentAt;
-      this.lastHeartbeat = Date.now();
-      this.missedCount = 0;
+    const latency = Date.now() - sentAt;
+    this.lastHeartbeat = Date.now();
+    this.missedCount = 0;
 
-      this.emit('heartbeat-ok', {
-        sequenceNumber: this.sequenceNumber,
-        latencyMs: latency,
-      });
+    this.emit('heartbeat-ok', {
+      sequenceNumber: this.sequenceNumber,
+      latencyMs: latency,
+    });
 
-      // Reset to healthy if was unhealthy
-      if (this.missedCount === 0) {
-        this.onHealthChange(true);
-      }
-
-      return ack;
-    } catch (err) {
-      throw err;
+    // Reset to healthy if was unhealthy
+    if (this.missedCount === 0) {
+      this.onHealthChange(true);
     }
+
+    return ack;
   }
 
   /**
