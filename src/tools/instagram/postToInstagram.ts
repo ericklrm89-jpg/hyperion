@@ -103,7 +103,32 @@ export async function executePostToInstagram(
   }
   await sleep(2500);
 
-  // 5. Navigate crop modal / Next buttons (Siguiente / Next)
+  // 5. Aplicar Regla de Oro: Seleccionar Aspect Ratio 9:16 (Reels) o 4:5 (Feed) para evitar recorte cuadrado 1:1 por defecto
+  await cxn.evaluate(`
+    (() => {
+      // Click crop button at bottom-left of modal preview
+      const cropBtn = Array.from(document.querySelectorAll('button, div[role="button"]')).find(e => {
+        const aria = (e.getAttribute('aria-label') || '').toLowerCase();
+        return aria.includes('recorte') || aria.includes('crop') || aria.includes('proporci');
+      });
+      if (cropBtn) cropBtn.click();
+    })()
+  `);
+  await sleep(600);
+
+  await cxn.evaluate(`
+    (() => {
+      const options = Array.from(document.querySelectorAll('button, div[role="button"], span'));
+      const targetOption = options.find(e => {
+        const t = (e.textContent || '').trim().toLowerCase();
+        return ${input.isReel} ? (t === '9:16' || t.includes('9:16') || t === 'original') : (t === '4:5' || t === 'original' || t.includes('4:5'));
+      });
+      if (targetOption) targetOption.click();
+    })()
+  `);
+  await sleep(600);
+
+  // 6. Navigate crop modal / Next buttons (Siguiente / Next)
   for (let step = 0; step < 3; step++) {
     await cxn.evaluate(`
       (() => {
