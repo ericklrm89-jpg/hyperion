@@ -5,6 +5,7 @@ exports.executePostToFacebook = executePostToFacebook;
 const zod_1 = require("zod");
 const logger_1 = require("../../core/logger");
 const verifyWithVision_1 = require("../../core/verifyWithVision");
+const overlay_1 = require("../../layers/overlay");
 /**
  * Facebook Post / Reel Input Schema
  */
@@ -38,14 +39,21 @@ async function executePostToFacebook(cxn, rawInput, options) {
     const input = exports.postToFacebookSchema.parse(rawInput);
     const sleep = options?.sleepFn || ((ms) => new Promise(r => setTimeout(r, ms)));
     logger_1.logger.info({ filePath: input.filePath, isReel: input.isReel }, '[Facebook] Starting automated post flow');
+    // 1. Inyectar Capa Manus primero (Ley Absoluta #1)
+    const overlay = new overlay_1.OverlayPrimitive(cxn);
+    await overlay.inject({ intervalMs: 250 });
+    await sleep(500);
     const targetUrl = input.isReel
         ? 'https://www.facebook.com/reels/create'
         : 'https://www.facebook.com/';
-    // 1. Navigate to target composer
+    // 2. Navigate to target composer
     await cxn.call('Page.enable');
     await cxn.evaluate(`window.onbeforeunload = null; window.location.href = '${targetUrl}';`);
     await sleep(1000);
-    // 2. Direct DOM File Injection
+    // Re-inyectar Capa Manus en la página destino
+    await overlay.inject({ intervalMs: 250 });
+    await sleep(500);
+    // 3. Direct DOM File Injection
     const doc = await cxn.call('DOM.getDocument', { depth: -1, pierce: true });
     const queryRes = await cxn.call('DOM.querySelector', {
         nodeId: doc.root.nodeId,

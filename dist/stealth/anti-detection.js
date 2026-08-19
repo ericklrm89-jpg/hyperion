@@ -2,30 +2,25 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AntiDetection = void 0;
 const logger_1 = require("../core/logger");
+/**
+ * Native CDP & Prototype Stealth Evasion Module
+ * Eliminates automated fingerprints (navigator.webdriver, chrome runtime shim, permissions, viewport)
+ */
 class AntiDetection {
     constructor(cxn) {
         this.cxn = cxn;
     }
     async apply(options) {
-        // 1. Automation override (native CDP, undetectable)
-        if (options.automationOverride) {
-            try {
-                await this.cxn.call('Emulation.setAutomationOverride', { enabled: true });
-            }
-            catch (err) {
-                logger_1.logger.debug({ err }, 'stealth override failed (automationOverride)');
-            }
-        }
-        // 2. Focus emulation (tabs in background not throttled)
+        // 1. Focus emulation (tabs in background not throttled)
         if (options.focusEmulation) {
             try {
                 await this.cxn.call('Emulation.setFocusEmulationEnabled', { enabled: true });
             }
             catch (err) {
-                logger_1.logger.debug({ err }, 'stealth override failed (focusEmulation)');
+                logger_1.logger.debug({ err }, 'stealth: focusEmulation failed');
             }
         }
-        // 3. User agent override (if specified)
+        // 2. User agent override (if specified)
         if (options.userAgent) {
             try {
                 await this.cxn.call('Emulation.setUserAgentOverride', {
@@ -33,78 +28,94 @@ class AntiDetection {
                 });
             }
             catch (err) {
-                logger_1.logger.debug({ err }, 'stealth override failed (userAgent)');
+                logger_1.logger.debug({ err }, 'stealth: userAgent failed');
             }
         }
-        // 4. Locale override
+        // 3. Locale override
         if (options.locale) {
             try {
                 await this.cxn.call('Emulation.setLocaleOverride', { locale: options.locale });
             }
             catch (err) {
-                logger_1.logger.debug({ err }, 'stealth override failed (locale)');
+                logger_1.logger.debug({ err }, 'stealth: locale failed');
             }
         }
-        // 5. Timezone override
+        // 4. Timezone override
         if (options.timezone) {
             try {
                 await this.cxn.call('Emulation.setTimezoneOverride', { timezoneId: options.timezone });
             }
             catch (err) {
-                logger_1.logger.debug({ err }, 'stealth override failed (timezone)');
+                logger_1.logger.debug({ err }, 'stealth: timezone failed');
             }
         }
-        // 6. Geolocation override
+        // 5. Geolocation override
         if (options.geolocation) {
             try {
                 await this.cxn.call('Emulation.setGeolocationOverride', options.geolocation);
             }
             catch (err) {
-                logger_1.logger.debug({ err }, 'stealth override failed (geolocation)');
+                logger_1.logger.debug({ err }, 'stealth: geolocation failed');
             }
         }
-        // 7. Runtime.enable is intentionally NOT called
-        // This avoids the runtime leak detectable by CreepJS/rebrowser
-        // 8. Zero JS patches: no addScriptToEvaluateOnNewDocument
-        // No window[name] modifications, no getter overrides
-        // Chrome native overrides only (Emulation.*)
-        // 9. Disable automation-controlled features
-        try {
-            await this.cxn.call('Page.addScriptToEvaluateOnNewDocument', {
-                source: `
-          // Minimal: override only what's necessary
-          // navigator.webdriver is handled by Emulation.setAutomationOverride
-          // No other modifications
-        `
+        // 6. Native JS Prototype Evasions on new document creation
+        if (!options.zeroJSPatches) {
+            try {
+                await this.cxn.call('Page.addScriptToEvaluateOnNewDocument', {
+                    source: `
+            // 1. Mask navigator.webdriver
+            Object.defineProperty(navigator, 'webdriver', {
+              get: () => undefined,
+              configurable: true
             });
-        }
-        catch (err) {
-            logger_1.logger.debug({ err }, 'stealth override failed (addScriptToEvaluateOnNewDocument)');
-        }
-        if (options.zeroJSPatches) {
-            // Remove the script we just added (it had no content anyway)
-            // The key is: we do NOT patch anything in JS land
-            // All anti-detection is native CDP
+
+            // 2. Mock Chrome runtime object
+            if (!window.chrome) {
+              window.chrome = {
+                runtime: {},
+                loadTimes: function() {},
+                csi: function() {},
+                app: {}
+              };
+            }
+
+            // 3. Mock permissions query for notification state
+            if (navigator.permissions && navigator.permissions.query) {
+              const originalQuery = navigator.permissions.query;
+              navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                  Promise.resolve({ state: Notification.permission }) :
+                  originalQuery(parameters)
+              );
+            }
+
+            // 4. Mock plugins length
+            if (!navigator.plugins || navigator.plugins.length === 0) {
+              Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+                configurable: true
+              });
+            }
+          `
+                });
+            }
+            catch (err) {
+                logger_1.logger.debug({ err }, 'stealth: Page.addScriptToEvaluateOnNewDocument failed');
+            }
         }
     }
     async cleanup() {
         try {
-            await this.cxn.call('Emulation.setAutomationOverride', { enabled: false });
-        }
-        catch (err) {
-            logger_1.logger.debug({ err }, 'stealth cleanup failed (automationOverride)');
-        }
-        try {
             await this.cxn.call('Emulation.setFocusEmulationEnabled', { enabled: false });
         }
         catch (err) {
-            logger_1.logger.debug({ err }, 'stealth cleanup failed (focusEmulation)');
+            logger_1.logger.debug({ err }, 'stealth cleanup: focusEmulation failed');
         }
         try {
             await this.cxn.call('Emulation.clearDeviceMetricsOverride');
         }
         catch (err) {
-            logger_1.logger.debug({ err }, 'stealth cleanup failed (clearDeviceMetricsOverride)');
+            logger_1.logger.debug({ err }, 'stealth cleanup: clearDeviceMetricsOverride failed');
         }
     }
 }

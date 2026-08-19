@@ -5,6 +5,8 @@ import { VisionEngine } from '../vision/VisionEngine';
 import { OverlayEngine } from '../overlay/OverlayEngine';
 import { ActionDefinition } from '../core/types';
 import { postToFacebookAction, executePostToFacebook } from '../tools/facebook/postToFacebook';
+import { sendGmailAction, executeSendGmail } from '../tools/gmail/sendGmail';
+import { sendWhatsAppAction, executeSendWhatsApp } from '../tools/whatsapp/sendWhatsApp';
 
 /**
  * LLM-Native Server Schema Definitions
@@ -251,6 +253,12 @@ export class LLMServer {
 
     // FACEBOOK POST
     this.registry.register(postToFacebookAction);
+
+    // GMAIL SEND
+    this.registry.register(sendGmailAction);
+
+    // WHATSAPP SEND
+    this.registry.register(sendWhatsAppAction);
   }
 
   /**
@@ -410,6 +418,14 @@ export class LLMServer {
 
         case 'facebook-post': {
           return executePostToFacebook(this.hyperion.cxn, validated);
+        }
+
+        case 'gmail-send': {
+          return executeSendGmail(this.hyperion.cxn, validated);
+        }
+
+        case 'whatsapp-send': {
+          return executeSendWhatsApp(this.hyperion.cxn, validated);
         }
 
         default:

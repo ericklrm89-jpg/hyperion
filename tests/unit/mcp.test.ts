@@ -1,30 +1,62 @@
-import { MCPServer } from '../../src/tools/mcp-server'
-import { Hyperion } from '../../src/hyperion'
+import { LLMServer } from '../../src/mcp/LLMServer';
+import { MCPServerAdapter } from '../../src/mcp/MCPServerAdapter';
 
-describe('MCPServer - unit', () => {
-  it('should create MCP server instance', () => {
-    const hyperion = new Hyperion({ mode: 'attach', websocketUrl: 'ws://localhost:9222' })
-    const server = new MCPServer(hyperion)
-    expect(server).toBeDefined()
-    expect(server.start).toBeDefined()
-    expect(server.stop).toBeDefined()
-  })
+describe('MCP Server Integration - Real Action Registration Tests', () => {
+  let mockHyperion: any;
+  let llmServer: LLMServer;
 
-  it('should have tool list', async () => {
-    const hyperion = new Hyperion({ mode: 'attach', websocketUrl: 'ws://localhost:9222' })
-    const server = new MCPServer(hyperion)
-    // Access the internal tool definitions via the server
-    const tools = [
-      'browser_navigate', 'browser_click', 'browser_type',
-      'browser_screenshot', 'browser_hover', 'browser_scroll',
-      'browser_select_option', 'browser_upload_file',
-      'browser_handle_dialog', 'browser_evaluate',
-      'browser_get_text', 'browser_get_url',
-      'browser_wait', 'browser_wait_for_selector'
-    ]
-    expect(tools.length).toBe(14)
-    expect(tools).toContain('browser_click')
-    expect(tools).toContain('browser_navigate')
-    expect(tools).toContain('browser_screenshot')
-  })
-})
+  beforeEach(() => {
+    mockHyperion = {
+      connect: jest.fn().mockResolvedValue(undefined),
+      disconnect: jest.fn().mockResolvedValue(undefined),
+      navigate: { to: jest.fn().mockResolvedValue(undefined) },
+      click: { click: jest.fn().mockResolvedValue(undefined) },
+      type: { type: jest.fn().mockResolvedValue(undefined) },
+      screenshot: { capture: jest.fn().mockResolvedValue(Buffer.from('img')) },
+      eval: jest.fn().mockResolvedValue({ value: 'Test Title' }),
+      getPageURL: jest.fn().mockResolvedValue('https://example.com'),
+      connection: {
+        call: jest.fn().mockResolvedValue({}),
+        evaluate: jest.fn().mockResolvedValue({ value: true }),
+        dispatchKeyEvent: jest.fn().mockResolvedValue({}),
+      },
+    };
+
+    llmServer = new LLMServer(mockHyperion);
+  });
+
+  it('should register all built-in actions in the ActionRegistry', () => {
+    const definitions = llmServer.getActionDefinitions();
+    const actionIds = definitions.map((d: any) => d.id);
+
+    expect(actionIds).toContain('facebook-post');
+    expect(actionIds).toContain('whatsapp-send');
+    expect(actionIds).toContain('gmail-send');
+    expect(actionIds).toContain('overlay-click');
+    expect(actionIds).toContain('vision-start');
+    expect(actionIds).toContain('screenshot');
+    expect(definitions.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('should instantiate MCPServerAdapter and configure stdio server', () => {
+    const adapter = new MCPServerAdapter(llmServer);
+    expect(adapter).toBeDefined();
+    expect(typeof (adapter as any).zodToJsonSchema).toBe('function');
+  });
+
+  it('should convert Zod schema to valid JSON schema for MCP tools', () => {
+    const adapter = new MCPServerAdapter(llmServer);
+    const definitions = llmServer.getActionDefinitions();
+    const fbDef = definitions.find((d: any) => d.id === 'facebook-post');
+
+    expect(fbDef).toBeDefined();
+    if (!fbDef) throw new Error('facebook-post not found');
+
+    const jsonSchema = (adapter as any).zodToJsonSchema(fbDef.schema);
+
+    expect(jsonSchema.type).toBe('object');
+    expect(jsonSchema.properties).toBeDefined();
+    expect(jsonSchema.properties.filePath).toBeDefined();
+    expect(jsonSchema.required).toContain('filePath');
+  });
+});

@@ -139,8 +139,8 @@ export class ClickPrimitive {
         if (${scrollIntoView}) el.scrollIntoView({block: 'center', behavior: 'instant'});
         const r = el.getBoundingClientRect();
         return JSON.stringify({
-          centerX: r.left + r.width / 2 + window.scrollX,
-          centerY: r.top + r.height / 2 + window.scrollY
+          centerX: Math.round(r.left + r.width / 2),
+          centerY: Math.round(r.top + r.height / 2)
         });
       })()
     `)

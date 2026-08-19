@@ -3,6 +3,7 @@ import { ActionDefinition, VerifiedActionResult } from '../../core/types';
 import { ConnectionManager } from '../../connection';
 import { logger } from '../../core/logger';
 import { verifyWithVision, createVerifiedActionResult, VerifyWithVisionParams } from '../../core/verifyWithVision';
+import { OverlayPrimitive } from '../../layers/overlay';
 
 /**
  * Facebook Post / Reel Input Schema
@@ -56,16 +57,25 @@ export async function executePostToFacebook(
 
   logger.info({ filePath: input.filePath, isReel: input.isReel }, '[Facebook] Starting automated post flow');
 
+  // 1. Inyectar Capa Manus primero (Ley Absoluta #1)
+  const overlay = new OverlayPrimitive(cxn);
+  await overlay.inject({ intervalMs: 250 });
+  await sleep(500);
+
   const targetUrl = input.isReel
     ? 'https://www.facebook.com/reels/create'
     : 'https://www.facebook.com/';
 
-  // 1. Navigate to target composer
+  // 2. Navigate to target composer
   await cxn.call('Page.enable');
   await cxn.evaluate(`window.onbeforeunload = null; window.location.href = '${targetUrl}';`);
   await sleep(1000);
 
-  // 2. Direct DOM File Injection
+  // Re-inyectar Capa Manus en la página destino
+  await overlay.inject({ intervalMs: 250 });
+  await sleep(500);
+
+  // 3. Direct DOM File Injection
   const doc = await cxn.call('DOM.getDocument', { depth: -1, pierce: true }) as any;
   const queryRes = await cxn.call('DOM.querySelector', {
     nodeId: doc.root.nodeId,

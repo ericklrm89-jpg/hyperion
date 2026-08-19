@@ -26,6 +26,8 @@ export * from './vision/VisionEngine';
 
 // Tools & Integrations
 export * from './tools/facebook/postToFacebook';
+export * from './tools/gmail/sendGmail';
+export * from './tools/whatsapp/sendWhatsApp';
 
 // Overlay System
 export * from './overlay/OverlayEngine';

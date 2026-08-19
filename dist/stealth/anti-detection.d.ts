@@ -1,9 +1,9 @@
 import { ConnectionManager } from '../connection';
 export interface StealthOptions {
-    runtimeEnable: boolean;
-    automationOverride: boolean;
-    focusEmulation: boolean;
-    zeroJSPatches: boolean;
+    runtimeEnable?: boolean;
+    automationOverride?: boolean;
+    focusEmulation?: boolean;
+    zeroJSPatches?: boolean;
     userAgent?: string;
     locale?: string;
     timezone?: string;
@@ -13,6 +13,10 @@ export interface StealthOptions {
         accuracy: number;
     };
 }
+/**
+ * Native CDP & Prototype Stealth Evasion Module
+ * Eliminates automated fingerprints (navigator.webdriver, chrome runtime shim, permissions, viewport)
+ */
 export declare class AntiDetection {
     private cxn;
     constructor(cxn: ConnectionManager);

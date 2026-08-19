@@ -2,11 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OverlayPrimitive = void 0;
 const detector_1 = require("./detector");
+const logger_1 = require("../core/logger");
 class OverlayPrimitive {
     constructor(cxn) {
         this.injected = false;
         this.defaultConfig = {
-            intervalMs: 2000,
+            intervalMs: 250,
             includePostLinks: true,
             gridSize: 200,
             zIndex: 2147483647
@@ -16,9 +17,9 @@ class OverlayPrimitive {
     }
     async inject(config) {
         const cfg = { ...this.defaultConfig, ...config };
-        // Step 1: Kill any existing overlay processes
+        // Step 1: Cleanly kill any existing overlay without touching web page timers
         await this.kill(true);
-        // Step 2: Build the overlay JS
+        // Step 2: Build and inject the isolated overlay JS
         const js = this.buildOverlayJS(cfg);
         await this.cxn.evaluate(js);
         // Step 3: Verify it's running
@@ -26,26 +27,36 @@ class OverlayPrimitive {
         if (!check?.value)
             throw new Error('Overlay injection failed');
         this.injected = true;
+        logger_1.logger.info('[Overlay/Manus] Capa Manus multicolor inyectada y activa con bucle dinámico (250ms)');
     }
     async kill(keepStyles = false) {
-        const rmSelector = keepStyles ? '.hy-el,.hy-tp' : '.hy-el,.hy-st,.hy-tp';
         await this.cxn.evaluate(`
       (function(){
-        try{
-          for(var i=0;i<100000;i++){try{clearInterval(i)}catch(e){}try{clearTimeout(i)}catch(e){}}
-          document.querySelectorAll('${rmSelector}').forEach(function(e){e.remove()});
-          window.__HY_KILL_ALL=true;
-          window.__HY_KILL=true;
-        }catch(e){}
+        try {
+          if (window.__HY_INTERVALS && Array.isArray(window.__HY_INTERVALS)) {
+            window.__HY_INTERVALS.forEach(function(id){ clearInterval(id); clearTimeout(id); });
+            window.__HY_INTERVALS = [];
+          }
+          if (window.__HY_OBSERVERS && Array.isArray(window.__HY_OBSERVERS)) {
+            window.__HY_OBSERVERS.forEach(function(obs){ obs.disconnect(); });
+            window.__HY_OBSERVERS = [];
+          }
+          var root = document.getElementById('__hyperion_overlay_root');
+          if (root) root.remove();
+          document.querySelectorAll('.hy-el, .hy-tp').forEach(function(e){ e.remove(); });
+          if (!${keepStyles}) {
+            document.querySelectorAll('.hy-st').forEach(function(e){ e.remove(); });
+          }
+          window.__HY_KILL = true;
+        } catch(e){}
       })()
     `);
         this.injected = false;
     }
     async ensureClean() {
-        // Check if overlay is running, kill if so
         const check = await this.cxn.evaluate(`
       (function(){
-        var hasOverlay = !!document.querySelector('.hy-el');
+        var hasOverlay = !!document.getElementById('__hyperion_overlay_root') || !!document.querySelector('.hy-el');
         var hasDataFn = typeof window.__hyData === 'function';
         return hasOverlay || hasDataFn;
       })()
@@ -84,25 +95,25 @@ class OverlayPrimitive {
             throw new Error(`Element with sid ${sid} not found`);
         const btnMap = { left: 'left', middle: 'middle', right: 'right' };
         const btnFlag = { left: 1, middle: 4, right: 2 };
-        const button = options?.button || 'left';
+        const button = btnMap[options?.button || 'left'] || 'left';
         const clickCount = options?.clickCount || 1;
-        const delay = 50;
-        await this.cxn.dispatchMouseEvent({
+        // Dispatch click via CDP input events
+        await this.cxn.call('Input.dispatchMouseEvent', {
             type: 'mousePressed',
-            x: el.x, y: el.y,
-            button: btnMap[button],
-            buttons: btnFlag[button],
+            x: el.x,
+            y: el.y,
+            button,
             clickCount,
+            buttons: btnFlag[button],
             modifiers: 0
         });
-        if (delay > 0)
-            await new Promise(r => setTimeout(r, delay));
-        await this.cxn.dispatchMouseEvent({
+        await this.cxn.call('Input.dispatchMouseEvent', {
             type: 'mouseReleased',
-            x: el.x, y: el.y,
-            button: btnMap[button],
-            buttons: 0,
+            x: el.x,
+            y: el.y,
+            button,
             clickCount,
+            buttons: 0,
             modifiers: 0
         });
     }
@@ -110,84 +121,65 @@ class OverlayPrimitive {
         return this.detector.detect();
     }
     buildOverlayJS(cfg) {
-        const colors = cfg.colors || ['#F00', '#0C0', '#06F', '#CC0', '#C0C', '#0CC', '#F80', '#80F'];
+        const colors = cfg.colors || [
+            '#00ff66', // Neon Emerald
+            '#00e5ff', // Cyber Cyan
+            '#ff007f', // Neon Magenta
+            '#ffea00', // Electric Yellow
+            '#d500f9', // Neon Purple
+            '#ff6d00', // Neon Orange
+            '#2979ff', // Electric Blue
+            '#00e676', // Spring Green
+            '#ff1744', // Crimson Neon
+            '#00b0ff', // Vivid Sky Blue
+        ];
         const colorsStr = colors.map(c => `'${c}'`).join(',');
-        const grid = cfg.gridSize || 200;
         const z = cfg.zIndex || 2147483647;
-        const interval = cfg.intervalMs || 2000;
+        const interval = cfg.intervalMs || 250;
         return `
 (function(){
-  window.__HY_KILL_ALL=false;
-  window.__HY_KILL=false;
+  window.__HY_KILL = false;
+  window.__HY_INTERVALS = window.__HY_INTERVALS || [];
+  window.__HY_OBSERVERS = window.__HY_OBSERVERS || [];
 
   if(!document.querySelector('.hy-st')){
     var s=document.createElement('style');s.className='hy-st';
-    s.textContent='.hy-el{position:fixed;pointer-events:none;z-index:${z};overflow:hidden;font:bold 11px/13px monospace;color:#fff;text-shadow:0 0 3px #000;padding:1px 2px;box-sizing:border-box;border:2px solid;border-radius:2px}';
+    s.textContent='#__hyperion_overlay_root{position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:${z};overflow:hidden;}' +
+      '.hy-el{position:fixed;pointer-events:none;z-index:${z};overflow:hidden;font:bold 11px/13px monospace;color:#fff;text-shadow:0 0 3px #000;padding:1px 3px;box-sizing:border-box;border:2px solid;border-radius:3px;box-shadow:0 0 4px rgba(0,0,0,0.5);}' +
+      '.hy-badge-banner{position:fixed;top:4px;left:4px;background:rgba(0,0,0,0.85);color:#00ff66;border:1px solid #00ff66;padding:3px 8px;border-radius:4px;font:bold 12px monospace;z-index:${z};pointer-events:none;}';
     document.head.appendChild(s);
   }
 
   var COLORS=[${colorsStr}];
-
-  function stableId(el){
-    var href=el.getAttribute('href')||'';
-    var aria=(el.getAttribute('aria-label')||'').replace(/[^a-z0-9_]/gi,'').slice(0,6);
-    var text=(el.textContent||'').trim().replace(/\\s+/g,' ').replace(/[^a-z0-9_ ]/gi,'').replace(/ /g,'_').slice(0,6).toUpperCase();
-    var suffix=(aria||text||el.tagName).slice(0,6);
-    if(href)return 'L_'+href.replace(/[^a-zA-Z0-9]/g,'_').slice(-16)+'_'+suffix;
-    var r=el.getBoundingClientRect();
-    var x=Math.round(r.left/${grid}),y=Math.round(r.top/${grid});
-    return el.tagName+'_'+suffix+'_'+x+'_'+y;
-  }
-
-  function hashStr(str){
-    var h=0;for(var i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h|=0}
-    return Math.abs(h)%100;
-  }
-
-  ${cfg.includePostLinks ? `
-  function isPostLink(el){
-    var h=el.getAttribute('href')||'';
-    return h.includes('/p/')||h.includes('/reel/')||h.includes('/photo/')||h.includes('/video/');
-  }` : `
-  function isPostLink(){return false;}`}
 
   function inViewport(r){
     return r.left<window.innerWidth && r.right>0 && r.top<window.innerHeight && r.bottom>0;
   }
 
   function collect(){
-    var all=document.querySelectorAll('a[href],button,input,textarea,select,[role="button"],[role="menuitem"],[role="tab"],[role="link"],[role="switch"],[tabindex]:not([tabindex="-1"]),label,h1,h2,h3,h4,h5,h6,[aria-label]');
-    var seen=new Set(),r=[];
+    var all=document.querySelectorAll('a[href],button,input,textarea,select,[role="button"],[role="menuitem"],[role="tab"],[role="link"],[role="switch"],[contenteditable="true"],[tabindex]:not([tabindex="-1"]),[onclick]');
+    var r=[];
+    var count = 0;
 
     for(var i=0;i<all.length;i++){
       try{
         var el=all[i];
-        if(el.offsetWidth===0||el.offsetHeight===0)continue;
-        if(el.tagName==='SVG'||el.tagName==='PATH'||el.tagName==='USE'||el.tagName==='CIRCLE'||el.tagName==='LINE')continue;
+        if(el.id === '__hyperion_overlay_root' || el.classList.contains('hy-el')) continue;
+        if(el.offsetWidth===0||el.offsetHeight===0) continue;
+        if(el.tagName==='SVG'||el.tagName==='PATH') continue;
+        
         var b=el.getBoundingClientRect();
-        if(b.width<15||b.height<15)continue;
+        if(b.width<8||b.height<8) continue;
+        if(!inViewport(b)) continue;
 
-        var post=isPostLink(el);
-        if(!post && !inViewport(b))continue;
-
-        var sid=stableId(el);
-        if(seen.has(sid))continue;seen.add(sid);
-
-        var text=(el.textContent||'').trim().replace(/\\s+/g,' ').slice(0,10);
-        var aria=el.getAttribute('aria-label')||'';
-        var label=text||aria||sid.slice(-4);
-        if(!label||label.trim()==='')label='['+sid.slice(-4)+']';
-
-        if(post){
-          var h=el.getAttribute('href')||'';
-          label=text||aria||'['+h.replace(/.*\\/(p|reel|photo|video)\\//,'').replace(/\\/$/,'').slice(0,6)+']';
-        }
+        count++;
+        var text=(el.textContent||el.getAttribute('aria-label')||el.getAttribute('placeholder')||'').trim().replace(/\\s+/g,' ').slice(0,15);
 
         r.push({
-          sid:hashStr(sid),
-          rect:{left:b.left,top:b.top,width:b.width,height:b.height},
+          sid: count,
+          rect:{left:Math.round(b.left),top:Math.round(b.top),width:Math.round(b.width),height:Math.round(b.height)},
           tag:el.tagName,
-          text:label.slice(0,10),
+          text: text,
           x:Math.round(b.left+b.width/2),
           y:Math.round(b.top+b.height/2)
         });
@@ -197,21 +189,30 @@ class OverlayPrimitive {
   }
 
   function render(){
+    if(window.__HY_KILL) return;
     try{
-      document.querySelectorAll('.hy-el').forEach(function(e){e.remove()});
+      var root = document.getElementById('__hyperion_overlay_root');
+      if(!root){
+        root = document.createElement('div');
+        root.id = '__hyperion_overlay_root';
+        document.documentElement.appendChild(root);
+      }
+
+      root.innerHTML = '';
       var els=collect();
 
-      var hdr=document.createElement('div');hdr.className='hy-el';
-      hdr.style.cssText='top:1px;left:1px;padding:2px 8px;background:rgba(0,0,0,0.85);border-radius:4px;font:bold 13px/16px monospace;color:#0f0;border-color:#0f0';
-      hdr.textContent='['+els.length+']';
-      document.body.appendChild(hdr);
+      var banner = document.createElement('div');
+      banner.className = 'hy-badge-banner';
+      banner.textContent = '⚡ CAPA MANUS MULTICOLOR ACTIVA [' + els.length + ' ELEMENTOS]';
+      root.appendChild(banner);
 
       for(var i=0;i<els.length;i++){
-        var e=els[i],b=e.rect,c=COLORS[e.sid%COLORS.length];
-        var d=document.createElement('div');d.className='hy-el';
-        d.style.cssText='left:'+b.left+'px;top:'+b.top+'px;width:'+b.width+'px;height:'+b.height+'px;background:rgba(0,0,0,0.1);border-color:'+c+';font-size:'+Math.min(10,b.height-2)+'px';
-        d.textContent='['+e.sid+']'+(b.width>40?' '+e.text:'');
-        document.body.appendChild(d);
+        var e=els[i],b=e.rect,c=COLORS[(e.sid - 1)%COLORS.length];
+        var d=document.createElement('div');
+        d.className='hy-el';
+        d.style.cssText='left:'+b.left+'px;top:'+b.top+'px;width:'+b.width+'px;height:'+b.height+'px;background:rgba(0,0,0,0.12);border-color:'+c+';color:'+c+';';
+        d.textContent='['+e.sid+']'+(b.width>50 && e.text ? ' '+e.text : '');
+        root.appendChild(d);
       }
     }catch(e){}
   }
@@ -219,14 +220,13 @@ class OverlayPrimitive {
   render();
 
   var tid=setInterval(function(){
-    if(window.__HY_KILL_ALL||window.__HY_KILL){clearInterval(tid);return}
+    if(window.__HY_KILL){clearInterval(tid);return}
     render();
-  },${interval});
+  }, ${interval});
+  window.__HY_INTERVALS.push(tid);
 
-  window.addEventListener('resize',function(){
-    if(window.__HY_KILL_ALL||window.__HY_KILL)return;
-    render();
-  });
+  window.addEventListener('resize', render, { passive: true });
+  window.addEventListener('scroll', render, { passive: true });
 
   window.__hyData=function(){
     try{
@@ -251,7 +251,7 @@ class OverlayPrimitive {
     }catch(e){return JSON.stringify({type:'ERROR',elements:[],error:e.message})}
   };
 })()
-`.trim();
+    `;
     }
 }
 exports.OverlayPrimitive = OverlayPrimitive;

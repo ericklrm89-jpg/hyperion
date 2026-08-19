@@ -1,7 +1,7 @@
 import { Hyperion } from '../hyperion';
 import { OverlayState } from '../core/types';
 /**
- * Overlay Engine - Robust element mapping with guaranteed single injection
+ * Overlay Engine - High-contrast multicolor dynamic element mapping (Capa Manus)
  */
 export declare class OverlayEngine {
     private state;

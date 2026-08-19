@@ -6,6 +6,8 @@ const ActionRegistry_1 = require("../core/ActionRegistry");
 const VisionEngine_1 = require("../vision/VisionEngine");
 const OverlayEngine_1 = require("../overlay/OverlayEngine");
 const postToFacebook_1 = require("../tools/facebook/postToFacebook");
+const sendGmail_1 = require("../tools/gmail/sendGmail");
+const sendWhatsApp_1 = require("../tools/whatsapp/sendWhatsApp");
 /**
  * LLM-Native Server Schema Definitions
  * All tools with Zod schemas for auto-documentation
@@ -217,6 +219,10 @@ class LLMServer {
         });
         // FACEBOOK POST
         this.registry.register(postToFacebook_1.postToFacebookAction);
+        // GMAIL SEND
+        this.registry.register(sendGmail_1.sendGmailAction);
+        // WHATSAPP SEND
+        this.registry.register(sendWhatsApp_1.sendWhatsAppAction);
     }
     /**
      * Execute action by ID
@@ -360,6 +366,12 @@ class LLMServer {
                 }
                 case 'facebook-post': {
                     return (0, postToFacebook_1.executePostToFacebook)(this.hyperion.cxn, validated);
+                }
+                case 'gmail-send': {
+                    return (0, sendGmail_1.executeSendGmail)(this.hyperion.cxn, validated);
+                }
+                case 'whatsapp-send': {
+                    return (0, sendWhatsApp_1.executeSendWhatsApp)(this.hyperion.cxn, validated);
                 }
                 default:
                     throw new Error(`Action not implemented: ${actionId}`);
