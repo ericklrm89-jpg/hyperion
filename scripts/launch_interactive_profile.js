@@ -184,22 +184,29 @@ async function main() {
     // Limpiar locks del perfil original
     cleanProfileLocks(selected.userDataDir);
 
-    // ⚡ SIEMPRE usar el userDataDir real del perfil (preserva cookies/sesiones)
-    // PowerShell Start-Process es el método que garantiza lanzamiento en Windows
-    const args = [
-      `--remote-debugging-port=${targetPort}`,
-      `--user-data-dir="${selected.userDataDir}"`,
-      `--profile-directory="${selected.profileDir}"`,
-      `--no-first-run`,
-      `--restore-last-session`
-    ].join('", "');
+    // ⚡ Escribir .ps1 temporal para evitar problemas de escape en PowerShell
+    const os = require('os');
+    const tmpPs1 = path.join(os.tmpdir(), `hyperion_launch_${targetPort}.ps1`);
+    const ps1Content = [
+      `$exe = '${selected.exe.replace(/'/g, "''")}' `,
+      `$args = @(`,
+      `  '--remote-debugging-port=${targetPort}',`,
+      `  '--user-data-dir=${selected.userDataDir.replace(/'/g, "''")}',`,
+      `  '--profile-directory=${selected.profileDir.replace(/'/g, "''")}',`,
+      `  '--no-first-run',`,
+      `  '--restore-last-session'`,
+      `)`,
+      `Start-Process -FilePath $exe -ArgumentList $args`
+    ].join('\n');
 
-    const psCmd = `Start-Process "${selected.exe}" -ArgumentList "${args}"`;
+    fs.writeFileSync(tmpPs1, ps1Content, 'utf8');
+    console.log(`   📄 Script PS1: ${tmpPs1}`);
 
     try {
-      execSync(`powershell.exe -NoProfile -WindowStyle Hidden -Command "${psCmd}"`, { stdio: 'ignore', timeout: 5000 });
+      execSync(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${tmpPs1}"`, { stdio: 'ignore', timeout: 6000 });
+      console.log('   ✅ Chrome lanzado via PowerShell');
     } catch (e) {
-      console.error('❌ Error PowerShell, intentando spawn directo...');
+      console.error('❌ Error PowerShell:', e.message, '— intentando spawn directo...');
       const child = spawn(selected.exe, [
         `--remote-debugging-port=${targetPort}`,
         `--user-data-dir=${selected.userDataDir}`,
@@ -209,6 +216,8 @@ async function main() {
       ], { detached: true, stdio: 'ignore' });
       child.unref();
     }
+
+    try { fs.unlinkSync(tmpPs1); } catch (e) {}
 
     await PortSessionManager.registerSession({
       port: targetPort,
