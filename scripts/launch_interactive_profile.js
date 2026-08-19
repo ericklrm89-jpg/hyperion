@@ -1,6 +1,6 @@
 /**
  * HYPERION INTERACTIVE PROFILE & MULTI-PORT SUPERVISOR
- * Selector interactivo de perfil y puerto CDP personalizado (9222..9240).
+ * Selector interactivo de perfil real y puerto CDP personalizado (9222..9240).
  */
 const fs = require('fs');
 const path = require('path');
@@ -102,7 +102,7 @@ async function main() {
   console.log('║        HYPERION BROWSER — GESTOR DE INSTANCIAS Y PERFILES MULTI-PUERTO            ║');
   console.log('╚═══════════════════════════════════════════════════════════════════════════════════╝\n');
 
-  console.log('🔍 Escaneando navegadores, perfiles y puertos CDP activos (9222..9240)...\n');
+  console.log('🔍 Escaneando navegadores, perfiles y puertos CDP activos...\n');
   const profiles = ProfileScanner.scanAllProfiles();
   const activeSessions = await PortSessionManager.getActiveSessions();
 
@@ -114,7 +114,7 @@ async function main() {
     return;
   }
 
-  // Sort profiles by activeTime descending (most recent first)
+  // Ordenar perfiles por tiempo de actividad reciente
   profiles.sort((a, b) => (b.activeTime || 0) - (a.activeTime || 0));
 
   const lastProfile = loadLastProfile();
@@ -144,7 +144,7 @@ async function main() {
   });
   console.log('└─────┴─────────────────┴──────────────────────┴────────────────────────────────┴────────────────────────────┘\n');
 
-  // Encontrar el primer perfil disponible o el último usado si está libre
+  // Encontrar el primer perfil disponible o el último usado
   const availableProfileIdx = profiles.findIndex(p => {
     const isBusy = activeSessions.some(s => 
       s.userDataDir.toLowerCase() === p.userDataDir.toLowerCase() &&
@@ -162,7 +162,7 @@ async function main() {
 
   const question = (query) => new Promise((resolve) => rl.question(query, resolve));
   
-  // 1. ELECCIÓN DEL PERFIL
+  // 1. ELECCIÓN DEL PERFIL (100% FIEL A TUS PERFILES REALES)
   const profileAnswer = (await question(`👉 Selecciona el perfil [1..${profiles.length}] (Enter para #${promptDefault}): `)).trim();
 
   let selectedIndex = promptDefault - 1;
@@ -175,10 +175,10 @@ async function main() {
 
   const selected = profiles[selectedIndex];
   
-  // 2. SUGERENCIA Y ELECCIÓN DEL PUERTO CDP
+  // 2. SUGERENCIA Y ELECCIÓN MANUAL DEL PUERTO CDP
   const suggestedPort = await PortSessionManager.findNextAvailablePort(9222, 9240);
   console.log(`\n🔌 Puerto CDP sugerido: ${suggestedPort}`);
-  const portAnswer = (await question(`👉 Ingresa el Puerto CDP deseado [Enter para ${suggestedPort}]: `)).trim();
+  const portAnswer = (await question(`👉 Ingresa el Puerto CDP [Enter para ${suggestedPort}]: `)).trim();
 
   let targetPort = suggestedPort;
   if (portAnswer && !isNaN(Number(portAnswer))) {
@@ -188,20 +188,15 @@ async function main() {
     }
   }
 
-  console.log(`\n🚀 Iniciando ${selected.browser} con Perfil "${selected.name}" en Puerto CDP: ${targetPort}...`);
+  console.log(`\n🚀 Iniciando ${selected.browser} con Perfil Real "${selected.name}" en Puerto CDP: ${targetPort}...`);
   saveLastProfile(selected);
 
-  // 3. Preparar directorio de datos (usar directorio de Hyperion para independencia y confiabilidad)
-  let effectiveUserDataDir = selected.userDataDir;
-  if (targetPort !== 9222 || activeSessions.length > 0) {
-    effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
-  }
-  
-  cleanProfileLocks(effectiveUserDataDir);
+  // 3. Limpiar bloqueos del directorio de perfil real del usuario
+  cleanProfileLocks(selected.userDataDir);
 
   const chromeFlags = [
     `--remote-debugging-port=${targetPort}`,
-    `--user-data-dir="${effectiveUserDataDir}"`,
+    `--user-data-dir="${selected.userDataDir}"`,
     `--profile-directory="${selected.profileDir}"`,
     '--no-first-run',
     '--restore-last-session',
@@ -224,7 +219,7 @@ async function main() {
     profileDir: selected.profileDir,
     profileName: selected.name,
     userDataDir: selected.userDataDir,
-    isolatedDataDir: effectiveUserDataDir,
+    isolatedDataDir: selected.userDataDir,
     pid: process.pid,
     startedAt: new Date().toISOString(),
     wsUrl: `ws://127.0.0.1:${targetPort}`
