@@ -4,6 +4,36 @@
 
 ---
 
+## 🛑 REGLA SUPREMA DE INICIO: LANZADOR INTERACTIVO Y SUPERVISOR PERSISTENTE
+
+> **TODA IA O AGENTE QUE UTILICE HYPERION DEBE SEGUIR ESTE PROTOCOLO OBLIGATORIO ANTES DE CUALQUIER ACCIÓN:**
+
+1. **Paso #1 Obligatorio tras Instalar o Iniciar:**
+   - La IA debe verificar si el puerto CDP (`http://127.0.0.1:9222/json/version` o `9223..9240`) responde.
+   - Si no está activo o se requiere un perfil específico, la IA **DEBE solicitar inmediatamente al usuario ejecutar:**
+     ```cmd
+     C:\hyperion\launch-chrome-debug.bat
+     ```
+     o en PowerShell:
+     ```powershell
+     .\launch-chrome-debug.ps1
+     ```
+
+2. **Ventana CMD Persistente (Supervisor en Tiempo Real):**
+   - El lanzador interactivo es un **Supervisor Persistente**: NO se cierra automáticamente.
+   - Muestra claramente en pantalla:
+     - **👉 PUERTO CDP ASIGNADO** (ej. `9222`, `9223`, `9224`...)
+     - **👉 URL DE CONEXIÓN LOCAL** (`http://127.0.0.1:<PORT>`)
+     - **👉 WEBSOCKET DEBUGGER URL** (`ws://127.0.0.1:<PORT>`)
+     - **• Perfil y Cuenta Vinculada**
+     - **• Pestañas Detectadas en Vivo**
+   - La IA debe leer el puerto activo y conectarse a esa instancia sin intentar abrir perfiles duplicados.
+
+3. **Aislamiento Multi-Proyecto (Cero Cruces de Sesión):**
+   - Si un agente o proyecto ya está usando el perfil `Erick` en el puerto `9222`, un nuevo proyecto que necesite Hyperion **NO DEBE** cruzar la sesión: debe ejecutar el menú para seleccionar un perfil libre (ej. `Fabricio`, `Diego`, `MatchMaker`) y un puerto dinámico (`9223`, `9224`, etc.).
+
+---
+
 ## 🏛️ ARQUITECTURA Y PRINCIPIOS DE AUTOMATIZACIÓN
 
 ### 1. Servidor MCP y Protocolo Stdio
@@ -18,9 +48,9 @@
 - **Singleton Guard:** Antes de inyectar o repintar, ejecutar teardown atómico (`destroy()`) para garantizar 0 capas sobre capas y 0 intervalos huérfanos.
 
 ### 3. Conexión CDP Resiliente y Alerta de Regla de Oro
-- Conectar siempre a Chrome vía WebSocket sobre CDP (puerto predeterminado `9222`, IPv4 `127.0.0.1:9222`).
+- Conectar siempre a Chrome vía WebSocket sobre CDP (puerto predeterminado `9222`, IPv4 `127.0.0.1:9222` o puerto asignado).
 - Usar `ConnectionHealthCheck` y `HeartbeatManager` para detectar desconexiones silenciosas.
-- **Alerta de Desconexión:** Si el puerto 9222 no responde (`ECONNREFUSED` / timeout), emitir la alerta inmediata al usuario para ejecutar `C:\hyperion\launch-chrome-debug.bat`.
+- **Alerta de Desconexión:** Si el puerto no responde (`ECONNREFUSED` / timeout), emitir la alerta inmediata al usuario para ejecutar `C:\hyperion\launch-chrome-debug.bat`.
 - Priorizar eventos nativos del DOM (`element.click()`) o `DOM.setFileInputFiles` para subida de archivos directa sin invocar el selector de archivos del sistema operativo.
 
 ### 4. Higiene de Procesos
