@@ -1,11 +1,10 @@
 /**
  * HYPERION INTERACTIVE PROFILE & MULTI-PORT SUPERVISOR
- * True Multi-Instance Isolation: Separate ports (9222, 9223, 9224...), zero process leaks.
+ * Rock-solid browser launch with live tab monitoring and dynamic port assignment.
  */
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-const net = require('net');
 const { spawn, execSync } = require('child_process');
 const readline = require('readline');
 const { ProfileScanner } = require('../dist/connection/resilience/ProfileScanner');
@@ -42,7 +41,7 @@ function cleanProfileLocks(dir) {
 
 function queryCdpTabs(port) {
   return new Promise((resolve) => {
-    http.get(`http://127.0.0.1:${port}/json/list`, { timeout: 1500 }, (res) => {
+    const req = http.get(`http://127.0.0.1:${port}/json/list`, { timeout: 1500 }, (res) => {
       let d = '';
       res.on('data', c => d += c);
       res.on('end', () => {
@@ -53,7 +52,9 @@ function queryCdpTabs(port) {
           resolve([]);
         }
       });
-    }).on('error', () => resolve([]));
+    });
+    req.on('error', () => resolve([]));
+    req.on('timeout', () => { req.destroy(); resolve([]); });
   });
 }
 
@@ -70,13 +71,13 @@ function drawPersistentDashboard(selected, port, tabs = []) {
   console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
   console.log(`║   • Navegador Activo   : ${selected.browser.padEnd(56)} ║`);
   console.log(`║   • Perfil en Uso      : ${(selected.name + ' (' + (selected.userName || selected.profileDir) + ')').padEnd(56)} ║`);
-  console.log(`║   • Carpeta de Datos   : ${selected.profileDir.padEnd(56)} ║`);
+  console.log(`║   • Directorio Perfil  : ${selected.profileDir.padEnd(56)} ║`);
   console.log(`║   • Pestañas Abiertas  : ${tabs.length.toString().padEnd(56)} ║`);
   console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
   console.log('║   📋 PESTAÑAS DETECTADAS EN VIVO:                                                 ║');
   
   if (tabs.length === 0) {
-    console.log('║      (Iniciando navegador... esperando páginas)                                   ║');
+    console.log('║      (Conectando con navegador... esperando páginas)                              ║');
   } else {
     tabs.slice(0, 6).forEach((t, i) => {
       const title = (t.title || t.url || 'Sin título').slice(0, 70);
@@ -177,7 +178,7 @@ async function main() {
   );
 
   let targetPort = 9222;
-  let browserChild = null;
+  let browserPid = null;
 
   if (activeMatch) {
     console.log(`\n⚠️  ATENCIÓN: El perfil "${selected.name}" YA ESTÁ ACTIVO en el puerto ${activeMatch.port}.`);
@@ -210,7 +211,16 @@ async function main() {
     // 1. Limpiar bloqueos de perfil
     cleanProfileLocks(selected.userDataDir);
 
-    // 2. Si no es el puerto 9222 o es una instancia paralela, usar directorio aislado si es necesario
+    // 2. Si no hay ningún CDP vivo en el puerto 9222, asegurar que procesos huérfanos de Chrome no bloqueen
+    const port9222Alive = await PortSessionManager.isPortInUse(9222);
+    if (targetPort === 9222 && !port9222Alive) {
+      try {
+        execSync('taskkill /f /im chrome.exe /im msedge.exe /im brave.exe >nul 2>&1', { stdio: 'ignore' });
+      } catch (e) {}
+      cleanProfileLocks(selected.userDataDir);
+    }
+
+    // 3. Si no es el puerto 9222 o es una instancia paralela, usar directorio aislado
     let effectiveUserDataDir = selected.userDataDir;
     if (targetPort !== 9222) {
       effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
@@ -228,12 +238,14 @@ async function main() {
       'https://www.facebook.com'
     ];
 
-    browserChild = spawn(selected.exe, args, {
-      detached: false,
+    const child = spawn(selected.exe, args, {
+      detached: true,
       stdio: 'ignore',
     });
+    child.unref();
+    browserPid = child.pid;
 
-    // 3. Registrar sesión activa
+    // 4. Registrar sesión activa
     await PortSessionManager.registerSession({
       port: targetPort,
       browser: selected.browser,
@@ -241,34 +253,29 @@ async function main() {
       profileName: selected.name,
       userDataDir: selected.userDataDir,
       isolatedDataDir: effectiveUserDataDir,
-      pid: browserChild.pid,
+      pid: browserPid,
       startedAt: new Date().toISOString(),
       wsUrl: `ws://127.0.0.1:${targetPort}`
     });
   }
 
   // Esperar a que el puerto responda
-  await new Promise(r => setTimeout(r, 2000));
+  await new Promise(r => setTimeout(r, 2500));
   let initialTabs = await queryCdpTabs(targetPort);
 
   // DIBUJAR DASHBOARD PERSISTENTE
   drawPersistentDashboard(selected, targetPort, initialTabs);
 
-  // Monitor continuo cada 4 segundos
+  // Monitor continuo cada 3 segundos
   const monitorInterval = setInterval(async () => {
     const tabs = await queryCdpTabs(targetPort);
     drawPersistentDashboard(selected, targetPort, tabs);
-  }, 4000);
+  }, 3000);
 
   const cleanupAndExit = async () => {
     clearInterval(monitorInterval);
     console.log(`\n🛑 Liberando puerto ${targetPort} y cerrando sesión...`);
     await PortSessionManager.releaseSession(targetPort);
-    if (browserChild && !browserChild.killed) {
-      try {
-        browserChild.kill('SIGKILL');
-      } catch (e) {}
-    }
     process.exit(0);
   };
 
