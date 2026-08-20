@@ -155,15 +155,14 @@ class MultiSessionOrchestrator {
      */
     async launchSession(profile, port) {
         ProfileManager_1.ProfileManager.saveLastProfile(profile);
-        // Preparar directorio de perfil aislado y clonar cookies/credenciales
-        const effectiveUserDataDir = PortSessionManager_1.PortSessionManager.getIsolatedUserDataDir(profile.browser, profile.profileDir);
-        ProfileManager_1.ProfileManager.seedProfileIfNew(profile.userDataDir, profile.profileDir, effectiveUserDataDir);
+        // Usar directamente el directorio real del perfil para conservar 100% las cuentas y sesiones
+        const effectiveUserDataDir = profile.userDataDir;
         ProfileManager_1.ProfileManager.cleanLocks(effectiveUserDataDir);
-        const args = [
+        const chromeFlags = [
             `--remote-debugging-port=${port}`,
             '--remote-allow-origins=*',
-            `--user-data-dir=${effectiveUserDataDir}`,
-            `--profile-directory=${profile.profileDir}`,
+            `--user-data-dir="${effectiveUserDataDir}"`,
+            `--profile-directory="${profile.profileDir}"`,
             '--no-first-run',
             '--restore-last-session',
             '--no-sandbox',
@@ -172,9 +171,9 @@ class MultiSessionOrchestrator {
             'https://web.whatsapp.com',
             'https://www.instagram.com',
             'https://www.facebook.com'
-        ];
-        const child = (0, child_process_1.spawn)(profile.exe, args, { detached: true, stdio: 'ignore' });
-        child.unref();
+        ].join(' ');
+        const launchCmd = `start "" "${profile.exe}" ${chromeFlags}`;
+        (0, child_process_1.exec)(launchCmd, { shell: 'cmd.exe' });
         // Register session in memory
         const session = {
             id: `session_${port}`,
@@ -257,18 +256,18 @@ class MultiSessionOrchestrator {
         if (!session)
             return;
         ProfileManager_1.ProfileManager.cleanLocks(session.effectiveUserDataDir);
-        const args = [
+        const chromeFlags = [
             `--remote-debugging-port=${port}`,
             '--remote-allow-origins=*',
-            `--user-data-dir=${session.effectiveUserDataDir}`,
-            `--profile-directory=${session.profile.profileDir}`,
+            `--user-data-dir="${session.effectiveUserDataDir}"`,
+            `--profile-directory="${session.profile.profileDir}"`,
             '--no-first-run',
             '--restore-last-session',
             '--no-sandbox',
             '--test-type'
-        ];
-        const child = (0, child_process_1.spawn)(session.profile.exe, args, { detached: true, stdio: 'ignore' });
-        child.unref();
+        ].join(' ');
+        const launchCmd = `start "" "${session.profile.exe}" ${chromeFlags}`;
+        (0, child_process_1.exec)(launchCmd, { shell: 'cmd.exe' });
         session.lastLaunchTime = Date.now();
         session.status = types_1.HealthState.RECONNECTING;
         this.addToast('info', `Relanzado puerto ${port} (${session.profile.name})`);
