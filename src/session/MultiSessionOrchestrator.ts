@@ -4,9 +4,7 @@
  * preset execution, workspace injection, and interactive CLI control.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { exec, execSync } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import * as readline from 'readline';
 
 import {
@@ -24,7 +22,7 @@ import { PortSessionManager } from '../connection/resilience/PortSessionManager'
 
 export class MultiSessionOrchestrator {
   private sessions: Map<number, ManagedSession> = new Map();
-  private watchdogEnabled = false; // Disabled by default to prevent unwanted loops; togglable with [t]
+  private watchdogEnabled = false; // Disabled by default; togglable with [t]
   private toasts: ToastNotification[] = [];
   private isInteractivePrompt = false;
   private monitorTimer: NodeJS.Timeout | null = null;
@@ -134,8 +132,8 @@ export class MultiSessionOrchestrator {
   private async launchMasterPreset(profiles: ProfileMetadata[]): Promise<void> {
     this.addToast('info', 'Ejecutando Preset Maestro Dual (9001 + 9002)...');
 
-    const prof1 = profiles.find(p => p.profileDir === 'Profile 18') || profiles[0];
-    const prof2 = profiles.find(p => p.profileDir === 'Profile 19' || p.profileDir !== prof1.profileDir) || profiles[1] || profiles[0];
+    const prof1 = profiles[0];
+    const prof2 = profiles[1] || profiles[0];
 
     await this.launchSession(prof1, 9001);
     await new Promise(r => setTimeout(r, 1500));
@@ -150,25 +148,16 @@ export class MultiSessionOrchestrator {
   private async launchSession(profile: ProfileMetadata, port: number): Promise<void> {
     ProfileManager.saveLastProfile(profile);
 
-    const isFirstSession = this.sessions.size === 0;
-    let effectiveUserDataDir = profile.userDataDir;
-
-    if (!isFirstSession) {
-      effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(profile.browser, profile.profileDir);
-      ProfileManager.seedProfileIfNew(profile.userDataDir, profile.profileDir, effectiveUserDataDir);
-    } else {
-      // First session cold boot: clean stray processes
-      try {
-        execSync('taskkill /f /im chrome.exe /im msedge.exe /im brave.exe >nul 2>&1', { stdio: 'ignore' });
-      } catch {}
-    }
-
+    // Preparar directorio de perfil aislado y clonar cookies/credenciales
+    const effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(profile.browser, profile.profileDir);
+    ProfileManager.seedProfileIfNew(profile.userDataDir, profile.profileDir, effectiveUserDataDir);
     ProfileManager.cleanLocks(effectiveUserDataDir);
 
-    const chromeFlags = [
+    const args = [
       `--remote-debugging-port=${port}`,
-      `--user-data-dir="${effectiveUserDataDir}"`,
-      `--profile-directory="${profile.profileDir}"`,
+      '--remote-allow-origins=*',
+      `--user-data-dir=${effectiveUserDataDir}`,
+      `--profile-directory=${profile.profileDir}`,
       '--no-first-run',
       '--restore-last-session',
       '--no-sandbox',
@@ -177,10 +166,10 @@ export class MultiSessionOrchestrator {
       'https://web.whatsapp.com',
       'https://www.instagram.com',
       'https://www.facebook.com'
-    ].join(' ');
+    ];
 
-    const launchCmd = `start "" "${profile.exe}" ${chromeFlags}`;
-    exec(launchCmd, { shell: 'cmd.exe' });
+    const child = spawn(profile.exe, args, { detached: true, stdio: 'ignore' });
+    child.unref();
 
     // Register session in memory
     const session: ManagedSession = {
@@ -239,13 +228,11 @@ export class MultiSessionOrchestrator {
           const timeSinceLaunch = Date.now() - (session.lastLaunchTime || 0);
 
           if (timeSinceLaunch < 8000) {
-            // Still in booting window (first 8s): do NOT mark offline and do NOT spam relaunch
             session.status = HealthState.RECONNECTING;
           } else {
             session.status = HealthState.OFFLINE;
             session.tabs = [];
 
-            // Watchdog Auto-Healing Trigger with debounce (only if explicitly enabled)
             if (this.watchdogEnabled && (session.retryCount || 0) < 2 && timeSinceLaunch > 15000) {
               session.retryCount = (session.retryCount || 0) + 1;
               this.addToast('warn', `🛡️ Watchdog: Sesión en puerto ${session.port} caída. Auto-relanzando (intento ${session.retryCount})...`);
@@ -276,18 +263,19 @@ export class MultiSessionOrchestrator {
 
     ProfileManager.cleanLocks(session.effectiveUserDataDir);
 
-    const chromeFlags = [
+    const args = [
       `--remote-debugging-port=${port}`,
-      `--user-data-dir="${session.effectiveUserDataDir}"`,
-      `--profile-directory="${session.profile.profileDir}"`,
+      '--remote-allow-origins=*',
+      `--user-data-dir=${session.effectiveUserDataDir}`,
+      `--profile-directory=${session.profile.profileDir}`,
       '--no-first-run',
       '--restore-last-session',
       '--no-sandbox',
       '--test-type'
-    ].join(' ');
+    ];
 
-    const launchCmd = `start "" "${session.profile.exe}" ${chromeFlags}`;
-    exec(launchCmd, { shell: 'cmd.exe' });
+    const child = spawn(session.profile.exe, args, { detached: true, stdio: 'ignore' });
+    child.unref();
 
     session.lastLaunchTime = Date.now();
     session.status = HealthState.RECONNECTING;
@@ -429,10 +417,7 @@ export class MultiSessionOrchestrator {
     const pAns = ports.length > 1 ? (await this.ask('👉 Puerto a capturar: ')).trim() : ports[0].toString();
     const port = Number(pAns);
     if (this.sessions.has(port)) {
-      const scDir = path.join(process.cwd(), 'screenshots');
-      if (!fs.existsSync(scDir)) fs.mkdirSync(scDir, { recursive: true });
-      const filename = path.join(scDir, `screenshot_port_${port}_${Date.now()}.png`);
-      this.addToast('info', `Guardando captura en: ${filename}`);
+      this.addToast('info', `Captura de pantalla solicitada en puerto ${port}.`);
     }
     this.isInteractivePrompt = false;
   }

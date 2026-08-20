@@ -4,7 +4,7 @@
  * real-time tab stream, latency metrics, and toast notifications.
  */
 
-import { DashboardViewState, HealthState, ManagedSession } from './types';
+import { DashboardViewState, HealthState } from './types';
 
 export class MasterDashboard {
   // ANSI Color Tokens
@@ -19,9 +19,6 @@ export class MasterDashboard {
   private static C_DIM = '\x1b[2m';
 
   // Badges
-  private static BADGE_ONLINE = '\x1b[1;42;37m 🟢 ACTIVO \x1b[0m';
-  private static BADGE_OFFLINE = '\x1b[1;41;37m 🔴 OFFLINE \x1b[0m';
-  private static BADGE_RECONNECT = '\x1b[1;43;30m 🟡 RECONECTANDO \x1b[0m';
   private static BADGE_WATCHDOG_ON = '\x1b[1;42;37m 🛡️ ACTIVO \x1b[0m';
   private static BADGE_WATCHDOG_OFF = '\x1b[1;40;37m ⚪ INACTIVO \x1b[0m';
 
@@ -29,7 +26,8 @@ export class MasterDashboard {
    * Renders the complete, self-refreshing Master Control Center UI
    */
   static render(state: DashboardViewState): void {
-    console.clear();
+    // Clear console using VT100 native clear escape sequences to prevent vertical stacking
+    process.stdout.write('\x1Bc\x1b[2J\x1b[3J\x1b[H');
 
     const totalSessions = state.sessions.length;
     const activeSessions = state.sessions.filter(s => s.status === HealthState.ONLINE).length;

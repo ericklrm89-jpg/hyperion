@@ -93,38 +93,43 @@ class ProfileManager {
                 catch { }
             }
             // Check Default profile
-            if (fs.existsSync(path.join(def.userDataDir, 'Default'))) {
-                const info = profileInfoMap['Default'] || {};
+            const checkProfileDir = (dirName, isDefault) => {
+                const fullDirPath = path.join(def.userDataDir, dirName);
+                if (!fs.existsSync(fullDirPath))
+                    return;
+                const info = profileInfoMap[dirName] || {};
+                let activeScore = (info.active_time || 0) * 1000;
+                // Si no hay active_time o para mayor precisión, comprobar mtime de archivos de actividad
+                const checkFiles = ['Preferences', 'History', 'Network', 'Sessions'];
+                for (const file of checkFiles) {
+                    const fp = path.join(fullDirPath, file);
+                    if (fs.existsSync(fp)) {
+                        try {
+                            const mtime = fs.statSync(fp).mtimeMs;
+                            if (mtime > activeScore)
+                                activeScore = mtime;
+                        }
+                        catch { }
+                    }
+                }
                 profiles.push({
                     browser: def.browser,
                     exe: validExe,
                     userDataDir: def.userDataDir,
-                    profileDir: 'Default',
-                    name: info.name || 'Perfil Predeterminado',
+                    profileDir: dirName,
+                    name: info.name || (isDefault ? 'Perfil Predeterminado' : dirName),
                     userName: info.user_name || '',
-                    activeTime: info.active_time || 0,
-                    isDefault: true,
+                    activeTime: activeScore,
+                    isDefault,
                 });
-            }
+            };
+            checkProfileDir('Default', true);
             // Check Profile 1..Profile 50
             for (let i = 1; i <= 50; i++) {
-                const dirName = `Profile ${i}`;
-                if (fs.existsSync(path.join(def.userDataDir, dirName))) {
-                    const info = profileInfoMap[dirName] || {};
-                    profiles.push({
-                        browser: def.browser,
-                        exe: validExe,
-                        userDataDir: def.userDataDir,
-                        profileDir: dirName,
-                        name: info.name || `Perfil ${i}`,
-                        userName: info.user_name || '',
-                        activeTime: info.active_time || 0,
-                        isDefault: false,
-                    });
-                }
+                checkProfileDir(`Profile ${i}`, false);
             }
         }
-        // Sort by activeTime descending (most recent first)
+        // Sort strictly by most recently and heavily used first (activeTime descending)
         return profiles.sort((a, b) => (b.activeTime || 0) - (a.activeTime || 0));
     }
     /**
@@ -149,6 +154,19 @@ class ProfileManager {
      */
     static seedProfileIfNew(sourceUserDataDir, profileDir, targetUserDataDir) {
         try {
+            if (!fs.existsSync(targetUserDataDir)) {
+                fs.mkdirSync(targetUserDataDir, { recursive: true });
+            }
+            // 1. Clona 'Local State' en la raíz para conservar la clave OSCrypt y cuentas
+            const srcLocalState = path.join(sourceUserDataDir, 'Local State');
+            const dstLocalState = path.join(targetUserDataDir, 'Local State');
+            if (fs.existsSync(srcLocalState) && !fs.existsSync(dstLocalState)) {
+                try {
+                    fs.copyFileSync(srcLocalState, dstLocalState);
+                }
+                catch { }
+            }
+            // 2. Clona los datos de sesión y cookies del perfil específico
             const targetDir = path.join(targetUserDataDir, profileDir);
             if (!fs.existsSync(targetDir)) {
                 fs.mkdirSync(targetDir, { recursive: true });
@@ -161,7 +179,9 @@ class ProfileManager {
                         'Login Data',
                         'Web Data',
                         'Network',
-                        'Local Storage'
+                        'Local Storage',
+                        'IndexedDB',
+                        'Session Storage'
                     ];
                     for (const item of criticalItems) {
                         const srcItem = path.join(sourceDir, item);

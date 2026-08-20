@@ -14,9 +14,6 @@ export declare class MasterDashboard {
     private static C_RED;
     private static C_BLUE;
     private static C_DIM;
-    private static BADGE_ONLINE;
-    private static BADGE_OFFLINE;
-    private static BADGE_RECONNECT;
     private static BADGE_WATCHDOG_ON;
     private static BADGE_WATCHDOG_OFF;
     /**
