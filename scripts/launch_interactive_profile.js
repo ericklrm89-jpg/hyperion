@@ -7,7 +7,7 @@ const path = require('path');
 const os = require('os');
 const http = require('http');
 const readline = require('readline');
-const { exec, execSync, spawn } = require('child_process');
+const { exec, execSync } = require('child_process');
 
 const LAST_PROFILE_FILE = path.join(os.homedir(), '.hyperion', 'last_profile.json');
 const SESSIONS_FILE = path.join(os.homedir(), '.hyperion', 'active_sessions.json');
@@ -195,7 +195,7 @@ function seedProfileIfNew(sourceUserDataDir, profileDir, targetUserDataDir) {
       fs.mkdirSync(targetUserDataDir, { recursive: true });
     }
 
-    // 1. Clona Local State para conservar clave OSCrypt
+    // 1. Clona Local State para conservar clave OSCrypt de descifrado de contraseñas y cuentas Google
     const srcLocalState = path.join(sourceUserDataDir, 'Local State');
     const dstLocalState = path.join(targetUserDataDir, 'Local State');
     if (fs.existsSync(srcLocalState) && !fs.existsSync(dstLocalState)) {
@@ -427,19 +427,10 @@ async function main() {
   console.log(`\n🚀 Iniciando ${selected.browser} con Perfil "${selected.name}" en Puerto CDP: ${targetPort}...`);
   saveLastProfile(selected);
 
-  // 3. AISLAMIENTO Y LIMPIEZA DE BLOQUEOS
-  let effectiveUserDataDir = selected.userDataDir;
-  
-  if (activeSessions.length > 0) {
-    effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
-    seedProfileIfNew(selected.userDataDir, selected.profileDir, effectiveUserDataDir);
-    cleanProfileLocks(effectiveUserDataDir);
-  } else {
-    try {
-      execSync('taskkill /f /im chrome.exe /im msedge.exe /im brave.exe >nul 2>&1', { stdio: 'ignore' });
-    } catch (e) {}
-    cleanProfileLocks(selected.userDataDir);
-  }
+  // 3. AISLAMIENTO SEGURO Y CLONACIÓN DE SESIÓN (Garantiza 100% que Chromium abra el puerto CDP sin bloquearse)
+  const effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
+  seedProfileIfNew(selected.userDataDir, selected.profileDir, effectiveUserDataDir);
+  cleanProfileLocks(effectiveUserDataDir);
 
   const launchBrowser = () => {
     cleanProfileLocks(effectiveUserDataDir);
