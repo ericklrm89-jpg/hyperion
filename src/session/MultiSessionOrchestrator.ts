@@ -6,7 +6,6 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { exec, execSync } from 'child_process';
 import * as readline from 'readline';
 
@@ -21,12 +20,11 @@ import { ProfileManager } from './ProfileManager';
 import { CdpEndpoint } from './CdpEndpoint';
 import { MasterDashboard } from './MasterDashboard';
 import { WorkspaceManager } from './WorkspaceManager';
-import { PresetManager } from './PresetManager';
 import { PortSessionManager } from '../connection/resilience/PortSessionManager';
 
 export class MultiSessionOrchestrator {
   private sessions: Map<number, ManagedSession> = new Map();
-  private watchdogEnabled = true;
+  private watchdogEnabled = false; // Disabled by default to prevent unwanted loops; togglable with [t]
   private toasts: ToastNotification[] = [];
   private isInteractivePrompt = false;
   private monitorTimer: NodeJS.Timeout | null = null;
@@ -136,7 +134,6 @@ export class MultiSessionOrchestrator {
   private async launchMasterPreset(profiles: ProfileMetadata[]): Promise<void> {
     this.addToast('info', 'Ejecutando Preset Maestro Dual (9001 + 9002)...');
 
-    // Find profile for 9001 and 9002
     const prof1 = profiles.find(p => p.profileDir === 'Profile 18') || profiles[0];
     const prof2 = profiles.find(p => p.profileDir === 'Profile 19' || p.profileDir !== prof1.profileDir) || profiles[1] || profiles[0];
 
@@ -196,6 +193,8 @@ export class MultiSessionOrchestrator {
       latencyMs: 0,
       startedAt: new Date().toISOString(),
       wsUrl: `ws://127.0.0.1:${port}`,
+      lastLaunchTime: Date.now(),
+      retryCount: 0,
     };
 
     this.sessions.set(port, session);
@@ -235,14 +234,23 @@ export class MultiSessionOrchestrator {
           const tabRes = await CdpEndpoint.getTabs(session.port);
           session.status = tabRes.status;
           session.tabs = tabRes.tabs;
+          session.retryCount = 0;
         } else {
-          session.status = HealthState.OFFLINE;
-          session.tabs = [];
+          const timeSinceLaunch = Date.now() - (session.lastLaunchTime || 0);
 
-          // Watchdog Auto-Healing Trigger
-          if (this.watchdogEnabled) {
-            this.addToast('warn', `🛡️ Watchdog: Sesión en puerto ${session.port} caída. Auto-relanzando...`);
-            this.relaunchSession(session.port);
+          if (timeSinceLaunch < 8000) {
+            // Still in booting window (first 8s): do NOT mark offline and do NOT spam relaunch
+            session.status = HealthState.RECONNECTING;
+          } else {
+            session.status = HealthState.OFFLINE;
+            session.tabs = [];
+
+            // Watchdog Auto-Healing Trigger with debounce (only if explicitly enabled)
+            if (this.watchdogEnabled && (session.retryCount || 0) < 2 && timeSinceLaunch > 15000) {
+              session.retryCount = (session.retryCount || 0) + 1;
+              this.addToast('warn', `🛡️ Watchdog: Sesión en puerto ${session.port} caída. Auto-relanzando (intento ${session.retryCount})...`);
+              this.relaunchSession(session.port);
+            }
           }
         }
       }
@@ -281,6 +289,7 @@ export class MultiSessionOrchestrator {
     const launchCmd = `start "" "${session.profile.exe}" ${chromeFlags}`;
     exec(launchCmd, { shell: 'cmd.exe' });
 
+    session.lastLaunchTime = Date.now();
     session.status = HealthState.RECONNECTING;
     this.addToast('info', `Relanzado puerto ${port} (${session.profile.name})`);
   }

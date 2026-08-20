@@ -52,7 +52,7 @@ const PortSessionManager_1 = require("../connection/resilience/PortSessionManage
 class MultiSessionOrchestrator {
     constructor() {
         this.sessions = new Map();
-        this.watchdogEnabled = true;
+        this.watchdogEnabled = false; // Disabled by default to prevent unwanted loops; togglable with [t]
         this.toasts = [];
         this.isInteractivePrompt = false;
         this.monitorTimer = null;
@@ -145,7 +145,6 @@ class MultiSessionOrchestrator {
      */
     async launchMasterPreset(profiles) {
         this.addToast('info', 'Ejecutando Preset Maestro Dual (9001 + 9002)...');
-        // Find profile for 9001 and 9002
         const prof1 = profiles.find(p => p.profileDir === 'Profile 18') || profiles[0];
         const prof2 = profiles.find(p => p.profileDir === 'Profile 19' || p.profileDir !== prof1.profileDir) || profiles[1] || profiles[0];
         await this.launchSession(prof1, 9001);
@@ -198,6 +197,8 @@ class MultiSessionOrchestrator {
             latencyMs: 0,
             startedAt: new Date().toISOString(),
             wsUrl: `ws://127.0.0.1:${port}`,
+            lastLaunchTime: Date.now(),
+            retryCount: 0,
         };
         this.sessions.set(port, session);
         // Register session in PortSessionManager
@@ -231,14 +232,23 @@ class MultiSessionOrchestrator {
                     const tabRes = await CdpEndpoint_1.CdpEndpoint.getTabs(session.port);
                     session.status = tabRes.status;
                     session.tabs = tabRes.tabs;
+                    session.retryCount = 0;
                 }
                 else {
-                    session.status = types_1.HealthState.OFFLINE;
-                    session.tabs = [];
-                    // Watchdog Auto-Healing Trigger
-                    if (this.watchdogEnabled) {
-                        this.addToast('warn', `🛡️ Watchdog: Sesión en puerto ${session.port} caída. Auto-relanzando...`);
-                        this.relaunchSession(session.port);
+                    const timeSinceLaunch = Date.now() - (session.lastLaunchTime || 0);
+                    if (timeSinceLaunch < 8000) {
+                        // Still in booting window (first 8s): do NOT mark offline and do NOT spam relaunch
+                        session.status = types_1.HealthState.RECONNECTING;
+                    }
+                    else {
+                        session.status = types_1.HealthState.OFFLINE;
+                        session.tabs = [];
+                        // Watchdog Auto-Healing Trigger with debounce (only if explicitly enabled)
+                        if (this.watchdogEnabled && (session.retryCount || 0) < 2 && timeSinceLaunch > 15000) {
+                            session.retryCount = (session.retryCount || 0) + 1;
+                            this.addToast('warn', `🛡️ Watchdog: Sesión en puerto ${session.port} caída. Auto-relanzando (intento ${session.retryCount})...`);
+                            this.relaunchSession(session.port);
+                        }
                     }
                 }
             }
@@ -271,6 +281,7 @@ class MultiSessionOrchestrator {
         ].join(' ');
         const launchCmd = `start "" "${session.profile.exe}" ${chromeFlags}`;
         (0, child_process_1.exec)(launchCmd, { shell: 'cmd.exe' });
+        session.lastLaunchTime = Date.now();
         session.status = types_1.HealthState.RECONNECTING;
         this.addToast('info', `Relanzado puerto ${port} (${session.profile.name})`);
     }

@@ -37,6 +37,8 @@ export interface ManagedSession {
     latencyMs: number;
     startedAt: string;
     wsUrl: string;
+    lastLaunchTime?: number;
+    retryCount?: number;
 }
 export interface WorkspacePreset {
     id: string;
