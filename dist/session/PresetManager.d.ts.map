@@ -1,0 +1,1 @@
+{"version":3,"file":"PresetManager.d.ts","sourceRoot":"","sources":["../../src/session/PresetManager.ts"],"names":[],"mappings":"AAAA;;;GAGG;AAKH,OAAO,EAAE,YAAY,EAAE,MAAM,SAAS,CAAC;AAIvC,qBAAa,aAAa;IACxB,OAAO,CAAC,MAAM,CAAC,cAAc,CA8B3B;IAEF;;OAEG;IACH,MAAM,CAAC,UAAU,IAAI,YAAY,EAAE;IAYnC;;OAEG;IACH,MAAM,CAAC,UAAU,CAAC,MAAM,EAAE,YAAY,GAAG,IAAI;CAS9C"}
