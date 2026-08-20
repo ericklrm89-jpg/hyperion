@@ -1,7 +1,15 @@
 /**
- * HYPERION INTERACTIVE PROFILE & MULTI-PORT SUPERVISOR
+ * HYPERION INTERACTIVE PROFILE & MULTI-PORT SUPERVISOR (V2.5)
  * True Multi-Instance Parallel Browser Launcher with Dynamic Port Allocation.
- * Supports simultaneous concurrent sessions (e.g. 9001 + 9002) with profile cloning.
+ * Features:
+ *  - Auto-detection & Live Tab Monitoring
+ *  - [s] Instant Relaunch / Re-open browser if closed
+ *  - [n] Open new URL / Fast Shortcut (WhatsApp, Gmail, Instagram, Facebook, Gemini)
+ *  - [k] Kill / Stop browser instance
+ *  - [l] Clean profile locks
+ *  - [p] List all active CDP ports & sessions
+ *  - [r] Force refresh tabs
+ *  - [q] Exit & release port
  */
 const fs = require('fs');
 const path = require('path');
@@ -62,60 +70,106 @@ function seedProfileIfNew(sourceUserDataDir, profileDir, targetUserDataDir) {
   } catch (e) {}
 }
 
-function queryCdpTabs(port) {
+function queryCdpState(port) {
   return new Promise((resolve) => {
-    const req = http.get(`http://127.0.0.1:${port}/json/list`, { timeout: 1500 }, (res) => {
+    const req = http.get(`http://127.0.0.1:${port}/json/list`, { timeout: 1200 }, (res) => {
       let d = '';
       res.on('data', c => d += c);
       res.on('end', () => {
         try {
           const list = JSON.parse(d).filter(x => x.type === 'page');
-          resolve(list);
+          resolve({ connected: true, tabs: list });
         } catch {
-          resolve([]);
+          resolve({ connected: true, tabs: [] });
         }
       });
     });
-    req.on('error', () => resolve([]));
-    req.on('timeout', () => { req.destroy(); resolve([]); });
+    req.on('error', () => resolve({ connected: false, tabs: [] }));
+    req.on('timeout', () => { req.destroy(); resolve({ connected: false, tabs: [] }); });
   });
 }
 
-function drawPersistentDashboard(selected, port, tabs = []) {
+function openCdpTab(port, url) {
+  return new Promise((resolve) => {
+    const req = http.get(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(url)}`, { timeout: 2000 }, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => resolve(true));
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+
+function launchBrowserProcess(selected, targetPort, effectiveUserDataDir) {
+  cleanProfileLocks(effectiveUserDataDir);
+
+  const chromeFlags = [
+    `--remote-debugging-port=${targetPort}`,
+    `--user-data-dir="${effectiveUserDataDir}"`,
+    `--profile-directory="${selected.profileDir}"`,
+    '--no-first-run',
+    '--restore-last-session',
+    '--no-sandbox',
+    '--test-type',
+    'https://mail.google.com',
+    'https://web.whatsapp.com',
+    'https://www.instagram.com',
+    'https://www.facebook.com'
+  ].join(' ');
+
+  const launchCmd = `start "" "${selected.exe}" ${chromeFlags}`;
+  exec(launchCmd, { shell: 'cmd.exe' });
+}
+
+function drawPersistentDashboard(selected, port, cdpState, customStatus = '') {
   console.clear();
+  const isOnline = cdpState.connected;
+  const statusBadge = isOnline ? '\x1b[1;42;37m 🟢 EN VIVO / CONECTADO \x1b[0m' : '\x1b[1;41;37m 🔴 NAVEGADOR CERRADO / DESCONECTADO \x1b[0m';
+
   console.log('╔═══════════════════════════════════════════════════════════════════════════════════╗');
   console.log('║               ⚡ HYPERION CDP SUPERVISOR — SESIÓN DE NAVEGADOR ACTIVA             ║');
   console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
-  console.log('║                                                                                   ║');
-  console.log(`║   👉 PUERTO CDP PARA OTRAS IAs  : \x1b[1;32m${port}\x1b[0m                                             ║`);
-  console.log(`║   👉 URL DE CONEXIÓN LOCAL      : \x1b[1;36mhttp://127.0.0.1:${port}\x1b[0m                                ║`);
-  console.log(`║   👉 WEBSOCKET DEBUGGER URL     : \x1b[1;33mws://127.0.0.1:${port}\x1b[0m                                  ║`);
-  console.log('║                                                                                   ║');
+  console.log(`║   ESTADO DE SESIÓN          : ${statusBadge.padEnd(58)} ║`);
+  console.log(`║   👉 PUERTO CDP PARA OTRAS IAs : \x1b[1;32m${port.toString().padEnd(6)}\x1b[0m                                          ║`);
+  console.log(`║   👉 URL DE CONEXIÓN LOCAL     : \x1b[1;36mhttp://127.0.0.1:${port}\x1b[0m                                ║`);
+  console.log(`║   👉 WEBSOCKET DEBUGGER URL    : \x1b[1;33mws://127.0.0.1:${port}\x1b[0m                                  ║`);
   console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
-  console.log(`║   • Navegador Activo   : ${selected.browser.padEnd(56)} ║`);
-  console.log(`║   • Perfil en Uso      : ${(selected.name + ' (' + (selected.userName || selected.profileDir) + ')').padEnd(56)} ║`);
-  console.log(`║   • Directorio Perfil  : ${selected.profileDir.padEnd(56)} ║`);
-  console.log(`║   • Pestañas Abiertas  : ${tabs.length.toString().padEnd(56)} ║`);
+  console.log(`║   • Navegador          : ${selected.browser.padEnd(56)} ║`);
+  console.log(`║   • Perfil Activo      : ${(selected.name + ' (' + (selected.userName || selected.profileDir) + ')').padEnd(56)} ║`);
+  console.log(`║   • Carpeta Perfil     : ${selected.profileDir.padEnd(56)} ║`);
+  console.log(`║   • Pestañas Abiertas  : ${cdpState.tabs.length.toString().padEnd(56)} ║`);
   console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
-  console.log('║   📋 PESTAÑAS DETECTADAS EN VIVO:                                                 ║');
+  console.log('║   📋 PESTAÑAS DETECTADAS EN TIEMPO REAL:                                          ║');
   
-  if (tabs.length === 0) {
+  if (!isOnline) {
+    console.log('║      ⚠️  EL NAVEGADOR ESTÁ CERRADO. Presiona [s + Enter] para volver a abrirlo.   ║');
+  } else if (cdpState.tabs.length === 0) {
     console.log('║      (Conectando con navegador... esperando páginas)                              ║');
   } else {
-    tabs.slice(0, 6).forEach((t, i) => {
+    cdpState.tabs.slice(0, 6).forEach((t, i) => {
       const title = (t.title || t.url || 'Sin título').slice(0, 70);
       console.log(`║      [${i + 1}] ${title.padEnd(73)} ║`);
     });
-    if (tabs.length > 6) {
-      console.log(`║      ... y ${tabs.length - 6} pestañas más                                                    ║`);
+    if (cdpState.tabs.length > 6) {
+      console.log(`║      ... y ${cdpState.tabs.length - 6} pestañas más                                                    ║`);
     }
   }
 
+  if (customStatus) {
+    console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
+    console.log(`║   ℹ️  ${customStatus.padEnd(75)} ║`);
+  }
+
   console.log('╠═══════════════════════════════════════════════════════════════════════════════════╣');
-  console.log('║   ℹ️  ESTA VENTANA ES PERSISTENTE. MANTENLA ABIERTA PARA QUE LAS IAs CONTROLEN    ║');
-  console.log('║       EL NAVEGADOR.                                                               ║');
-  console.log('║                                                                                   ║');
-  console.log('║   [q + Enter] Salir y liberar puerto | [r + Enter] Refrescar | [Ctrl+C] Cerrar     ║');
+  console.log('║   🛠️  COMANDOS DISPONIBLES EN ESTA CONSOLA:                                        ║');
+  console.log('║   [s + Enter] 🔄 Reabrir / Relanzar Navegador (mismo perfil y puerto)             ║');
+  console.log('║   [n + Enter] 🌐 Abrir nueva pestaña / acceso rápido                              ║');
+  console.log('║   [k + Enter] 🛑 Cerrar navegador forzosamente                                    ║');
+  console.log('║   [p + Enter] 🔌 Ver todas las sesiones y puertos activos en el sistema           ║');
+  console.log('║   [l + Enter] 🧹 Limpiar bloqueos (locks) de perfil                               ║');
+  console.log('║   [r + Enter] ⚡ Refrescar estado y pestañas en vivo                              ║');
+  console.log('║   [q + Enter] 🚪 Salir del supervisor y liberar puerto                            ║');
   console.log('╚═══════════════════════════════════════════════════════════════════════════════════╝\n');
 }
 
@@ -185,7 +239,7 @@ async function main() {
 
   const question = (query) => new Promise((resolve) => rl.question(query, resolve));
   
-  // 1. ELECCIÓN DEL PERFIL (100% FIEL A TUS PERFILES REALES)
+  // 1. ELECCIÓN DEL PERFIL
   const profileAnswer = (await question(`👉 Selecciona el perfil [1..${profiles.length}] (Enter para #${promptDefault}): `)).trim();
 
   let selectedIndex = promptDefault - 1;
@@ -214,41 +268,22 @@ async function main() {
   console.log(`\n🚀 Iniciando ${selected.browser} con Perfil "${selected.name}" en Puerto CDP: ${targetPort}...`);
   saveLastProfile(selected);
 
-  // 3. Determinar directorio de datos y gestión de aislamiento multi-instancia
+  // 3. Determinar directorio de datos
   let effectiveUserDataDir = selected.userDataDir;
   
   if (activeSessions.length > 0) {
-    // Es una segunda o tercera instancia en paralelo: aislar directorio para que Chrome permita múltiples procesos concurrentes
     effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
     seedProfileIfNew(selected.userDataDir, selected.profileDir, effectiveUserDataDir);
-    cleanProfileLocks(effectiveUserDataDir);
   } else {
-    // Es la primera instancia activa: limpiar posibles procesos huérfanos antes de iniciar
     try {
       execSync('taskkill /f /im chrome.exe /im msedge.exe /im brave.exe >nul 2>&1', { stdio: 'ignore' });
     } catch (e) {}
-    cleanProfileLocks(selected.userDataDir);
   }
 
-  const chromeFlags = [
-    `--remote-debugging-port=${targetPort}`,
-    `--user-data-dir="${effectiveUserDataDir}"`,
-    `--profile-directory="${selected.profileDir}"`,
-    '--no-first-run',
-    '--restore-last-session',
-    '--no-sandbox',
-    '--test-type',
-    'https://mail.google.com',
-    'https://web.whatsapp.com',
-    'https://www.instagram.com',
-    'https://www.facebook.com'
-  ].join(' ');
+  // 4. Lanzar proceso inicial
+  launchBrowserProcess(selected, targetPort, effectiveUserDataDir);
 
-  const launchCmd = `start "" "${selected.exe}" ${chromeFlags}`;
-
-  exec(launchCmd, { shell: 'cmd.exe' });
-
-  // 4. Registrar sesión activa
+  // 5. Registrar sesión activa
   await PortSessionManager.registerSession({
     port: targetPort,
     browser: selected.browser,
@@ -263,15 +298,19 @@ async function main() {
 
   // Esperar a que el navegador termine de abrir y responder CDP
   await new Promise(r => setTimeout(r, 2500));
-  let initialTabs = await queryCdpTabs(targetPort);
+  let currentState = await queryCdpState(targetPort);
 
-  // DIBUJAR DASHBOARD PERSISTENTE
-  drawPersistentDashboard(selected, targetPort, initialTabs);
+  let bannerMessage = 'Sesión iniciada con éxito.';
+  drawPersistentDashboard(selected, targetPort, currentState, bannerMessage);
 
   // Monitor continuo cada 3 segundos
+  let isPrompting = false;
   const monitorInterval = setInterval(async () => {
-    const tabs = await queryCdpTabs(targetPort);
-    drawPersistentDashboard(selected, targetPort, tabs);
+    if (!isPrompting) {
+      currentState = await queryCdpState(targetPort);
+      drawPersistentDashboard(selected, targetPort, currentState, bannerMessage);
+      bannerMessage = '';
+    }
   }, 3000);
 
   const cleanupAndExit = async () => {
@@ -281,14 +320,82 @@ async function main() {
     process.exit(0);
   };
 
-  // Manejo de comandos interactivos en la ventana persistente
+  // Manejo de comandos interactivos enriquecidos
   rl.on('line', async (line) => {
     const cmd = line.trim().toLowerCase();
+    
     if (cmd === 'q') {
       await cleanupAndExit();
+    } else if (cmd === 's') {
+      bannerMessage = `🔄 Relanzando ${selected.browser} en puerto ${targetPort}...`;
+      launchBrowserProcess(selected, targetPort, effectiveUserDataDir);
+      await new Promise(r => setTimeout(r, 2500));
+      currentState = await queryCdpState(targetPort);
+      bannerMessage = currentState.connected ? '✅ Navegador relanzado y reconectado con éxito.' : '⚠️ Navegador iniciado, esperando respuesta...';
+      drawPersistentDashboard(selected, targetPort, currentState, bannerMessage);
+    } else if (cmd === 'k') {
+      bannerMessage = `🛑 Cerrando procesos de Chrome en este equipo...`;
+      try {
+        execSync('taskkill /f /im chrome.exe >nul 2>&1', { stdio: 'ignore' });
+        bannerMessage = 'Navegador cerrado forzosamente. Presiona [s + Enter] para volver a abrirlo.';
+      } catch (e) {
+        bannerMessage = 'No se encontraron procesos activos para cerrar.';
+      }
+      currentState = await queryCdpState(targetPort);
+      drawPersistentDashboard(selected, targetPort, currentState, bannerMessage);
+    } else if (cmd === 'l') {
+      cleanProfileLocks(effectiveUserDataDir);
+      cleanProfileLocks(selected.userDataDir);
+      bannerMessage = '🧹 Bloqueos de perfil (SingletonLock) eliminados correctamente.';
+      drawPersistentDashboard(selected, targetPort, currentState, bannerMessage);
+    } else if (cmd === 'p') {
+      const allSessions = await PortSessionManager.getActiveSessions();
+      console.log('\n┌────────────────────────────────────────────────────────────────────────────────────────┐');
+      console.log('│  PUERTOS Y SESIONES CDP ACTIVAS EN HYPERION                                            │');
+      console.log('├─────────┬──────────────────────┬──────────────────────┬────────────────────────────────┤');
+      console.log('│ PUERTO  │ NAVEGADOR            │ PERFIL               │ WEBSOCKET URL                  │');
+      console.log('├─────────┼──────────────────────┼──────────────────────┼────────────────────────────────┤');
+      if (allSessions.length === 0) {
+        console.log('│ (No hay sesiones registradas actualmente)                                              │');
+      } else {
+        allSessions.forEach(s => {
+          console.log(`│ ${s.port.toString().padEnd(7)} │ ${s.browser.padEnd(20).slice(0, 20)} │ ${s.profileName.padEnd(20).slice(0, 20)} │ ${(s.wsUrl || '').padEnd(30).slice(0, 30)} │`);
+        });
+      }
+      console.log('└─────────┴──────────────────────┴──────────────────────┴────────────────────────────────┘');
+      console.log('\nPresiona [r + Enter] para volver al panel...');
+    } else if (cmd === 'n') {
+      isPrompting = true;
+      console.log('\n🌐 ABRIR NUEVA PESTAÑA / ACCESO RÁPIDO:');
+      console.log('   [1] WhatsApp Web  (https://web.whatsapp.com)');
+      console.log('   [2] Gmail          (https://mail.google.com)');
+      console.log('   [3] Instagram      (https://www.instagram.com)');
+      console.log('   [4] Facebook       (https://www.facebook.com)');
+      console.log('   [5] Google Gemini  (https://gemini.google.com)');
+      console.log('   O escribe cualquier URL directa (ej. https://ejemplo.com):');
+      
+      const dest = (await question('👉 Elige opción o ingresa URL: ')).trim();
+      let targetUrl = dest;
+      if (dest === '1') targetUrl = 'https://web.whatsapp.com';
+      else if (dest === '2') targetUrl = 'https://mail.google.com';
+      else if (dest === '3') targetUrl = 'https://www.instagram.com';
+      else if (dest === '4') targetUrl = 'https://www.facebook.com';
+      else if (dest === '5') targetUrl = 'https://gemini.google.com';
+      
+      if (targetUrl) {
+        if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+          targetUrl = 'https://' + targetUrl;
+        }
+        await openCdpTab(targetPort, targetUrl);
+        bannerMessage = `Pestaña abierta: ${targetUrl}`;
+      }
+      isPrompting = false;
+      currentState = await queryCdpState(targetPort);
+      drawPersistentDashboard(selected, targetPort, currentState, bannerMessage);
     } else if (cmd === 'r') {
-      const tabs = await queryCdpTabs(targetPort);
-      drawPersistentDashboard(selected, targetPort, tabs);
+      currentState = await queryCdpState(targetPort);
+      bannerMessage = 'Panel refrescado manualmente.';
+      drawPersistentDashboard(selected, targetPort, currentState, bannerMessage);
     }
   });
 
