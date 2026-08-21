@@ -14,36 +14,30 @@ CODEX        │     Overlay [0][1][2]...
 HERMES       └─── Action Registry + Full Tracing
 ```
 
-## 🚀 ¿Qué Hay de Nuevo en V2?
+## 🚀 ¿Qué Hay de Nuevo en Hyperion V3.5?
 
-### **1. LLM-Friendly API con Zod Schemas**
-- ✅ **Auto-documentación** → Los LLMs entienden cada tool sin ambigüedad
-- ✅ **Type-safe execution** → Validación automática de inputs
-- ✅ **16+ herramientas pre-registradas** → screenshot, click, type, overlay, vision, etc.
+### **1. Master Multi-Session Launcher & Supervisor (`launch-chrome-debug.bat`)**
+- ✅ **Bypass Maestro con NTFS Directory Junction** → Enlace directo a nivel de kernel al perfil original `%LOCALAPPDATA%\Google\Chrome\User Data`, bypassando la restricción de seguridad de Chromium sin clonación ni copias y manteniendo 100% de logins y cuentas de Google y WhatsApp.
+- ✅ **Selección Interactiva de Perfiles y Puertos** → Escaneo dinámico con timestamps de actividad, soporte de perfiles múltiples (`Erick ⭐`, `Default`, `Profile 1..N`) y puertos CDP independientes (`9001`, `9002`, `9222`, etc.).
+- ✅ **Dashboard en Vivo con Comandos de Consola:**
+  - `[s + Enter]` → Relanza la sesión seleccionada si se cerró la ventana.
+  - `[n + Enter]` → Abre nueva pestaña o acceso directo (WhatsApp Web, Gmail, Facebook, Instagram, Gemini).
+  - `[w + Enter]` → Inyecta suites preconfiguradas (Work Suite, Social Suite, AI Hub).
+  - `[r + Enter]` → Refresca el estado y las pestañas en vivo.
+  - `[q + Enter]` → Cierra la sesión y libera el puerto.
 
-### **2. Heartbeat + Auto-Reconexión Resiliente**
-- ✅ **Health monitoring** → Detecta desconexiones silenciosas
-- ✅ **Exponential backoff** → Reconnect automático con delay creciente
-- ✅ **Connection pool** → Métricas en tiempo real (latency, mensajes, errores)
-- ✅ **No más "connection lost"** → Se recupera automáticamente
+### **2. Inyección de Plantillas HTML Enriquecidas en Gmail (Trusted Types Bypass)**
+- ✅ **Bypass de Políticas de Seguridad de Google** → Inyección de tablas comparativas, estilos CSS inline y badges mediante `document.execCommand('insertHTML')` con disparo reactivo de eventos `input` y `change`.
+- ✅ **Consolidación de Destinatarios (Chip Commit)** → Emisión automática de evento `Enter` (VirtualKeyCode 13) para validar chips en el campo *"Para"*.
 
-### **3. Real-Time Vision Streaming**
-- ✅ **Frames continuos** → 1-10 fps configurable
-- ✅ **Change detection** → Detecta qué elementos se agregaron/removieron
-- ✅ **Platform detection** → Identifica Instagram, TikTok, Facebook, etc.
-- ✅ **Full element metadata** → Posición, texto, selectores, roles ARIA
+### **3. Subida de Archivos y Adjuntos Nativos (Cero Modales de SO)**
+- ✅ **Inyección vía CDP `DOM.setFileInputFiles`** → Adjunta flyers, PDFs y fotos directamente sobre el `backendNodeId` de `input[type="file"]` sin invocar diálogos del explorador de Windows.
 
-### **4. Universal Action Framework**
-- ✅ **Full execution tracing** → Screenshot before/after, retry history, duration
-- ✅ **Automatic retry** → Configurable por acción (timeout, backoff)
-- ✅ **Execution history** → Últimas 1000 acciones con logs completos
-- ✅ **Listener pattern** → Subscribe a eventos de ejecución
-
-### **5. Overlay Engine Robusto**
-- ✅ **Inyección UNA SOLA VEZ** → Garantizado, sin duplicados
-- ✅ **Auto-refresh** → Se actualiza ante cambios en el DOM
-- ✅ **MutationObserver + Resize** → Siempre sincronizado
-- ✅ **Click by ID [0][1][2]** → LLM ve los números y hace click
+### **4. Capa Manus V3.2 Inmune a CSP**
+- ✅ **Cero Dependencia de Etiquetas `<style>`** → 100% estilos inline directos con `cssText`.
+- ✅ **Deduplicación Geométrica por Rejilla (`geoKey`)** → Elimina badges encimados priorizando botones e inputs.
+- ✅ **Soporte Completo de Shadow DOM** → Mapeo recursivo profundo en componentes web encapsulados.
+- ✅ **Bucle Dinámico 250ms con Singleton Guard** → Cero intervalos huérfanos y adaptación al scroll en SPAs.
 
 ## 📋 Arquitectura V2
 
