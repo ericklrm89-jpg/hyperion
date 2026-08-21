@@ -83,3 +83,27 @@
    - **Un Solo Logo:** Incluir siempre *"ONE single logo only. NO double logo"* en los prompts de generación.
    - **Logo Real por Referencia:** Pasar siempre `logo_real.png` como `ImagePaths` — NUNCA confiar en que el modelo dibuje el logo de memoria.
    - **Cero Badges Falsos:** NUNCA incluir badges de "App Store" o "Google Play" para plataformas exclusivamente Web como FairDraw (`fairdrawapp.com`).
+
+---
+
+## 🧠 LECCIONES MAESTRAS DE AUTOMATIZACIÓN CDP & WEB (Agosto 2026)
+
+### 1. Bypass del Perfil Real Nativo en Chromium (NTFS Directory Junction)
+- **Problema:** Chromium en Windows bloquea `--remote-debugging-port` si se le pasa directamente `%LOCALAPPDATA%\Google\Chrome\User Data` arrojando: `DevTools remote debugging requires a non-default data directory`.
+- **Solución:** Crear un Directory Junction NTFS (`mklink /J ~/.hyperion/real_chrome_data "%LOCALAPPDATA%\Google\Chrome\User Data"`). Opera al 100% sobre el perfil real en vivo (0 clonación, 0 copias, sesiones y contraseñas intactas) y permite que Chromium active el puerto CDP en verde de inmediato.
+
+### 2. Inyección de Plantillas HTML en Gmail Web (Bypass de Trusted Types)
+- **Problema:** Las políticas de Trusted Types de Gmail impiden asignar `innerHTML` directamente sobre `div[aria-label="Cuerpo del mensaje"]`.
+- **Solución:**
+  1. Enfocar el cuerpo del mensaje (`body.focus()`).
+  2. Seleccionar todo (`document.execCommand('selectAll', false, null)`).
+  3. Inyectar HTML enriquecido con `document.execCommand('insertHTML', false, htmlString)`.
+  4. Disparar eventos reactivos: `body.dispatchEvent(new Event('input', { bubbles: true }))` y `body.dispatchEvent(new Event('change', { bubbles: true }))`.
+- **Destinatario:** Para consolidar el chip en el campo "Para", enviar evento de tecla `Enter` (VirtualKeyCode: 13) sobre `input.agP.aFw` / `input[peoplekit-id]`.
+
+### 3. Subida de Archivos y Adjuntos sin Modales de Windows
+- Usar siempre `DOM.setFileInputFiles` sobre el `backendNodeId` de `input[type="file"]`. NUNCA disparar clics que abran el diálogo de archivos nativo de Windows.
+
+### 4. Higiene y Prevención de Bucles en Supervisores
+- Si una sesión está en arranque inicial, respetar una ventana de cooldown (mínimo 8s) antes de verificar estado o relanzar para evitar spawneo de ventanas repetidas.
+- En Windows CMD, utilizar secuencias de escape VT100 (`\x1Bc\x1b[2J\x1b[3J\x1b[H`) para refrescar pantallas sin causar parpadeo ni desplazamiento vertical repetitivo.

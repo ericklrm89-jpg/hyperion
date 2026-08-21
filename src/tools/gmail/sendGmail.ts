@@ -84,22 +84,33 @@ export async function executeSendGmail(
 
   // 4. Fill Fields (Recipient, Subject, Rich HTML Body)
   const fillRes = await cxn.evaluate(`(() => {
-    const toInput = document.querySelector('input[aria-label="Para"]') || document.querySelector('input[peoplekit-id]');
+    const toInput = document.querySelector('input.agP.aFw') ||
+                    document.querySelector('input[peoplekit-id]') ||
+                    document.querySelector('input[aria-label="Para"]') ||
+                    document.querySelector('div[aria-label="Para"] input');
     if (toInput) {
       toInput.focus();
+      toInput.click();
       document.execCommand('insertText', false, ${JSON.stringify(input.recipient)});
+      toInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      toInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
     }
-    const subj = document.querySelector('input[name="subjectbox"]');
+    const subj = document.querySelector('input[name="subjectbox"]') ||
+                 document.querySelector('input[aria-label="Asunto"]');
     if (subj) {
       subj.focus();
+      subj.click();
       document.execCommand('insertText', false, ${JSON.stringify(input.subject)});
     }
-    const body = document.querySelector('div[aria-label="Cuerpo del mensaje"]');
+    const body = document.querySelector('div[aria-label="Cuerpo del mensaje"]') ||
+                 document.querySelector('div[role="textbox"]');
     if (body) {
       body.focus();
       document.execCommand('selectAll', false, null);
       document.execCommand('delete', false, null);
       document.execCommand('insertHTML', false, ${JSON.stringify(input.bodyHtml)});
+      body.dispatchEvent(new Event('input', { bubbles: true }));
+      body.dispatchEvent(new Event('change', { bubbles: true }));
     }
     return true;
   })()`);
