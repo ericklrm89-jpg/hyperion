@@ -127,224 +127,269 @@ class OverlayPrimitive {
         return this.detector.detect();
     }
     buildOverlayJS(cfg) {
+        const colors = cfg.colors || [
+            '#00ff66', // Neon Emerald
+            '#00e5ff', // Cyber Cyan
+            '#ff007f', // Neon Magenta
+            '#ffea00', // Electric Yellow
+            '#d500f9', // Neon Purple
+            '#ff6d00', // Neon Orange
+            '#2979ff', // Electric Blue
+            '#00e676', // Spring Green
+            '#ff1744', // Crimson Neon
+            '#00b0ff', // Vivid Sky Blue
+        ];
+        const colorsStr = colors.map(c => `'${c}'`).join(',');
         const z = cfg.zIndex || 2147483647;
         const interval = cfg.intervalMs || 250;
         return `
 (function(){
-  // 1. Singleton Guard: Teardown previo atómico
+  // 1. Teardown any previous singleton to prevent layered stacking
   if (window.__HY_MANUS_SINGLETON && typeof window.__HY_MANUS_SINGLETON.destroy === 'function') {
     try { window.__HY_MANUS_SINGLETON.destroy(); } catch(e){}
   }
-  if (window.__HY_SINGLE_TIMER) {
-    clearInterval(window.__HY_SINGLE_TIMER);
-    window.__HY_SINGLE_TIMER = null;
+
+  document.querySelectorAll('#__hyperion_overlay_root, #__hyperion_overlay_container, [id^="__hyperion_overlay"], .hy-el, .hy-overlay-rect').forEach(function(e){ e.remove(); });
+
+  if(!document.getElementById('__hyperion_overlay_styles')){
+    var s = document.createElement('style');
+    s.id = '__hyperion_overlay_styles';
+    s.textContent = '#__hyperion_overlay_root{position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:${z};overflow:hidden;}' +
+      '.hy-el{position:fixed;pointer-events:none;z-index:${z};overflow:hidden;font:bold 11px/13px monospace;color:#fff;text-shadow:0 0 3px #000;box-sizing:border-box;border:2px solid;border-radius:3px;}' +
+      '.hy-badge{position:absolute;top:0;left:0;padding:1px 4px;font-weight:bold;font-size:10px;line-height:12px;border-radius:0 0 3px 0;z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.6);}' +
+      '.hy-badge-banner{position:fixed;top:4px;left:4px;background:rgba(0,0,0,0.9);color:#00ff66;border:1px solid #00ff66;padding:3px 8px;border-radius:4px;font:bold 12px monospace;z-index:${z};pointer-events:none;}';
+    document.head.appendChild(s);
   }
 
-  // Limpieza total de elementos previos sin innerHTML
-  document.querySelectorAll('.hy-el, .hy-st, .hy-rr, #hyperion-manus-root, #__hyperion_overlay_root, style[id*="hyperion"]').forEach(function(e){ e.remove(); });
-
-  var PALETTE = [
-    { fill: 'rgba(239, 68, 68, 0.16)',  border: '#ef4444', badge: '#ef4444', text: '#ffffff' }, // Rojo
-    { fill: 'rgba(34, 197, 94, 0.16)',  border: '#22c55e', badge: '#22c55e', text: '#000000' }, // Verde
-    { fill: 'rgba(59, 130, 246, 0.16)', border: '#3b82f6', badge: '#3b82f6', text: '#ffffff' }, // Azul
-    { fill: 'rgba(234, 179, 8, 0.16)',  border: '#eab308', badge: '#eab308', text: '#000000' }, // Amarillo
-    { fill: 'rgba(168, 85, 247, 0.16)', border: '#a855f7', badge: '#a855f7', text: '#ffffff' }, // Violeta
-    { fill: 'rgba(236, 72, 153, 0.16)', border: '#ec4899', badge: '#ec4899', text: '#ffffff' }  // Rosa
-  ];
-
-  function getDeepElements(root) {
-    root = root || document;
-    var selector = 'button, a, input, textarea, select, [role="button"], [role="menuitem"], [role="tab"], [role="link"], [role="switch"], [role="checkbox"], [role="textbox"], [role="listitem"], [role="option"], [role="row"], [data-tab], [data-icon], span[data-icon], [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
-    var els = Array.from(root.querySelectorAll(selector));
-    var allNodes = Array.from(root.querySelectorAll('*'));
-    for (var i = 0; i < allNodes.length; i++) {
-      if (allNodes[i].shadowRoot) {
-        els = els.concat(getDeepElements(allNodes[i].shadowRoot));
-      }
-    }
-    return els;
-  }
-
-  function getActiveElements() {
-    var w = window.innerWidth, h = window.innerHeight;
-    var raw = getDeepElements(document);
-    var seenKeys = new Map();
-    var valid = [];
-
-    for (var i = 0; i < raw.length; i++) {
-      try {
-        var el = raw[i];
-        if (el.id === 'hyperion-manus-root' || el.closest('#hyperion-manus-root')) continue;
-        if (el.offsetWidth === 0 || el.offsetHeight === 0) continue;
-
-        var r = el.getBoundingClientRect();
-        if (r.width < 8 || r.height < 8) continue;
-        if (r.right < 0 || r.bottom < 0 || r.left > w || r.top > h) continue;
-
-        var aria = el.getAttribute('aria-label') || 
-                   el.getAttribute('title') || 
-                   el.getAttribute('placeholder') || 
-                   el.getAttribute('data-icon') || 
-                   el.getAttribute('name') || '';
-        var rawText = aria || el.textContent || '';
-        var cleanText = rawText.replace(/[\\u200b-\\u200f\\ufeff\\u00ad]/g, '').replace(/\\s+/g, ' ').trim().slice(0, 20);
-        if (!cleanText && el.tagName !== 'INPUT' && el.tagName !== 'BUTTON') continue;
-        if (!cleanText) cleanText = el.tagName.toLowerCase();
-
-        // Agrupación y deduplicación geométrica de 4px
-        var geoKey = Math.round(r.left / 4) * 4 + '_' + 
-                     Math.round(r.top / 4) * 4 + '_' + 
-                     Math.round(r.width / 4) * 4 + '_' + 
-                     Math.round(r.height / 4) * 4;
-
-        if (seenKeys.has(geoKey)) {
-          var existing = seenKeys.get(geoKey);
-          if (el.tagName === 'BUTTON' || el.tagName === 'INPUT' || (cleanText.length > existing.text.length && existing.el.tagName !== 'BUTTON')) {
-            existing.el = el;
-            existing.text = cleanText;
-            existing.rect = r;
-          }
-          continue;
-        }
-
-        var item = { el: el, rect: r, text: cleanText, tag: el.tagName };
-        seenKeys.set(geoKey, item);
-        valid.push(item);
-      } catch(e) {}
-    }
-
-    return valid;
-  }
-
+  var COLORS = [${colorsStr}];
   var isRendering = false;
 
-  function render() {
-    if (window.__HY_KILL || isRendering) return;
+  function inViewport(r){
+    return r.left < window.innerWidth && r.right > 0 && r.top < window.innerHeight && r.bottom > 0;
+  }
+
+  function isInteractive(el){
+    if(!el || el.nodeType !== 1) return false;
+    var tag = el.tagName;
+    if(tag === 'BUTTON' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'A') return true;
+    if(el.isContentEditable || el.getAttribute('contenteditable') === 'true' || el.getAttribute('role') === 'textbox') return true;
+    
+    var role = el.getAttribute('role');
+    if(role === 'button' || role === 'tab' || role === 'menuitem' || role === 'listitem' || role === 'row' || role === 'gridcell' || role === 'option' || role === 'switch' || role === 'checkbox' || role === 'link') return true;
+
+    if(el.hasAttribute('onclick') || el.hasAttribute('data-icon') || el.hasAttribute('data-tab') || el.hasAttribute('data-testid')) return true;
+
+    if(el.tabIndex >= 0 || el.getAttribute('tabindex') === '-1') {
+      var txt = (el.textContent || '').trim();
+      if(txt && el.parentElement && el.parentElement.getAttribute('role') === 'grid') return true;
+    }
+
+    var style = window.getComputedStyle(el);
+    if(style.cursor === 'pointer') return true;
+
+    return false;
+  }
+
+  function collect(){
+    var elements = [];
+    var all = document.querySelectorAll('*');
+    var rawList = [];
+
+    // 1. First find top-level semantic rows in list / chat panes
+    var chatRows = Array.from(document.querySelectorAll('#pane-side [role="row"], #pane-side [role="listitem"], [role="feed"] [role="article"], [role="dialog"] [role="button"]'));
+    var rowElements = new Set();
+    for(var cr = 0; cr < chatRows.length; cr++){
+      var row = chatRows[cr];
+      var rb = row.getBoundingClientRect();
+      if(rb.width >= 20 && rb.height >= 20 && inViewport(rb)){
+        rawList.push({ el: row, rect: rb, isPriorityRow: true });
+        rowElements.add(row);
+      }
+    }
+
+    for(var i = 0; i < all.length; i++){
+      try{
+        var el = all[i];
+        if(!isInteractive(el)) continue;
+
+        // Skip internal children of prioritized rows unless they are independent buttons/actions
+        if(!rowElements.has(el) && el.closest('#pane-side [role="row"]')) {
+          if(el.tagName !== 'BUTTON' && el.getAttribute('role') !== 'button') continue;
+        }
+
+        // Skip internal svg/path/span if parent is already a button
+        if((el.tagName === 'svg' || el.tagName === 'path' || el.tagName === 'SPAN' || el.tagName === 'DIV') && el.closest('button, [role="button"], a[href]')) {
+          if(el.tagName !== 'BUTTON' && el.getAttribute('role') !== 'button') continue;
+        }
+
+        var b = el.getBoundingClientRect();
+        if(b.width < 8 || b.height < 8) continue;
+        if(b.width > window.innerWidth * 0.98 && b.height > window.innerHeight * 0.98) continue;
+        if(!inViewport(b)) continue;
+
+        rawList.push({ el: el, rect: b });
+      }catch(e){}
+    }
+
+    var filtered = [];
+    for(var j = 0; j < rawList.length; j++){
+      var item = rawList[j];
+      var el = item.el;
+      var b = item.rect;
+      
+      var isDuplicate = false;
+      for(var k = 0; k < filtered.length; k++){
+        var existing = filtered[k];
+        var eb = existing.rect;
+        var diffX = Math.abs(b.left - eb.left);
+        var diffY = Math.abs(b.top - eb.top);
+        var diffW = Math.abs(b.width - eb.width);
+        var diffH = Math.abs(b.height - eb.height);
+
+        // If almost same geometry
+        if(diffX < 8 && diffY < 8 && diffW < 16 && diffH < 16){
+          isDuplicate = true;
+          // Prefer parent row / button with meaningful text
+          if(!existing.isPriorityRow && item.isPriorityRow){
+            filtered[k] = item;
+          }
+          break;
+        }
+      }
+
+      if(!isDuplicate){
+        filtered.push(item);
+      }
+    }
+
+    var count = 0;
+    for(var m = 0; m < filtered.length; m++){
+      var f = filtered[m];
+      var el = f.el;
+      var b = f.rect;
+      count++;
+
+      var text = (el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('placeholder') || el.getAttribute('data-icon') || el.textContent || '').trim().replace(/\\s+/g,' ').slice(0,25);
+
+      elements.push({
+        sid: count,
+        rect: { left: Math.round(b.left), top: Math.round(b.top), width: Math.round(b.width), height: Math.round(b.height) },
+        tag: el.tagName,
+        text: text,
+        x: Math.round(b.left + b.width/2),
+        y: Math.round(b.top + b.height/2),
+        domElement: el
+      });
+    }
+
+    return elements;
+  }
+
+  function render(){
+    if(window.__HY_KILL || isRendering) return;
     isRendering = true;
-    try {
-      var root = document.getElementById('hyperion-manus-root');
-      if (!root) {
+    try{
+      var root = document.getElementById('__hyperion_overlay_root');
+      if(!root){
         root = document.createElement('div');
-        root.id = 'hyperion-manus-root';
-        root.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:${z};overflow:hidden;';
+        root.id = '__hyperion_overlay_root';
         document.documentElement.appendChild(root);
       }
 
-      // Vaciado seguro compatible con Trusted Types
-      while (root.firstChild) {
-        root.removeChild(root.firstChild);
-      }
+      root.innerHTML = '';
+      var els = collect();
 
-      var items = getActiveElements();
-      var cachedElements = [];
-
-      // Banner Superior Centrado
       var banner = document.createElement('div');
-      banner.style.cssText = 'position:fixed;top:4px;left:50%;transform:translateX(-50%);padding:4px 18px;background:rgba(15,23,42,0.96);border:2px solid #22c55e;border-radius:20px;font:bold 12px monospace;color:#22c55e;white-space:nowrap;box-shadow:0 6px 16px rgba(0,0,0,0.8);z-index:${z};pointer-events:none;';
-      banner.innerText = '⚡ CAPA MANUS v3.2 [' + items.length + ' ELEMENTOS ACTIVOS]';
+      banner.className = 'hy-badge-banner';
+      banner.textContent = '⚡ CAPA MANUS SINGLETON [' + els.length + ' ELEMENTOS]';
       root.appendChild(banner);
 
-      for (var i = 0; i < items.length; i++) {
-        var item = items[i];
-        var r = item.rect;
-        var c = PALETTE[i % PALETTE.length];
-        var sid = i + 1;
+      for(var i = 0; i < els.length; i++){
+        var e = els[i], b = e.rect, c = COLORS[(e.sid - 1)%COLORS.length];
+        var d = document.createElement('div');
+        d.className = 'hy-el';
+        d.style.cssText = 'left:' + b.left + 'px;top:' + b.top + 'px;width:' + b.width + 'px;height:' + b.height + 'px;background:rgba(0,0,0,0.10);border-color:' + c + ';';
 
-        var box = document.createElement('div');
-        box.style.cssText = 'position:fixed;pointer-events:none;box-sizing:border-box;border:2px solid ' + c.border + ';border-radius:3px;z-index:${z};left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px;background:' + c.fill + ';';
+        var badge = document.createElement('div');
+        badge.className = 'hy-badge';
+        badge.style.cssText = 'background:' + c + ';color:#000;';
+        badge.textContent = '[' + e.sid + ']' + (b.width > 70 && e.text ? ' ' + e.text.slice(0, 12) : '');
+        d.appendChild(badge);
 
-        var tag = document.createElement('div');
-        tag.style.cssText = 'position:absolute;top:0;left:0;font:bold 10.5px/12px monospace;padding:1px 4px;border-bottom-right-radius:3px;text-shadow:0 0 2px #000;white-space:nowrap;z-index:${z};background:' + c.badge + ';color:' + c.text + ';';
-        tag.innerText = '[' + sid + '] ' + item.text;
-
-        box.appendChild(tag);
-        root.appendChild(box);
-
-        cachedElements.push({
-          sid: sid,
-          tag: item.tag,
-          text: item.text,
-          x: Math.round(r.left + r.width / 2),
-          y: Math.round(r.top + r.height / 2),
-          w: Math.round(r.width),
-          h: Math.round(r.height),
-          rect: { left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }
-        });
+        root.appendChild(d);
       }
 
-      window.__HY_OVERLAY_CACHE = cachedElements;
-    } catch(e) {
-    } finally {
+      window.__HY_OVERLAY_CACHE = els;
+    }catch(e){
+    }finally{
       isRendering = false;
     }
   }
 
   render();
-  var tid = setInterval(render, ${interval});
-  window.__HY_SINGLE_TIMER = tid;
 
+  var tid = setInterval(render, ${interval});
+  
   var resizeHandler = function(){ render(); };
   var scrollHandler = function(){ render(); };
   window.addEventListener('resize', resizeHandler, { passive: true });
   window.addEventListener('scroll', scrollHandler, { passive: true, capture: true });
 
   var observer = new MutationObserver(function(mutations){
-    var hasAppMutation = false;
-    for (var i = 0; i < mutations.length; i++){
+    var hasNonOverlayMutation = false;
+    for(var i = 0; i < mutations.length; i++){
       var t = mutations[i].target;
-      if (t && (t.id === 'hyperion-manus-root' || (t.closest && t.closest('#hyperion-manus-root')))) continue;
-      hasAppMutation = true;
+      if(t && (t.id === '__hyperion_overlay_root' || t.classList?.contains('hy-el'))) continue;
+      hasNonOverlayMutation = true;
       break;
     }
-    if (hasAppMutation) render();
+    if(hasNonOverlayMutation) render();
   });
 
-  if (document.body) {
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class', 'style', 'disabled', 'hidden', 'aria-hidden']
-    });
-  }
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'style', 'disabled', 'hidden', 'aria-hidden']
+  });
 
+  // Global Singleton Handle with clean destruction API
   window.__HY_MANUS_SINGLETON = {
     destroy: function(){
       clearInterval(tid);
-      window.__HY_SINGLE_TIMER = null;
       window.removeEventListener('resize', resizeHandler);
       window.removeEventListener('scroll', scrollHandler);
       observer.disconnect();
-      var root = document.getElementById('hyperion-manus-root');
-      if (root) root.remove();
+      var root = document.getElementById('__hyperion_overlay_root');
+      if(root) root.remove();
+      var style = document.getElementById('__hyperion_overlay_styles');
+      if(style) style.remove();
       delete window.__HY_MANUS_SINGLETON;
     },
     render: render
   };
 
   window.__hyData = function(){
-    try {
-      var els = window.__HY_OVERLAY_CACHE || [];
+    try{
+      var els = window.__HY_OVERLAY_CACHE || collect();
       var dialog = null;
-      try {
+      try{
         var ds = document.querySelectorAll('[role="dialog"]');
-        for (var i = 0; i < ds.length; i++){
+        for(var i = 0; i < ds.length; i++){
           var d = ds[i];
-          if (d.offsetWidth === 0 || d.offsetHeight === 0) continue;
+          if(d.offsetWidth === 0 || d.offsetHeight === 0) continue;
           var r = d.getBoundingClientRect();
-          if (r.width < 80 || r.height < 80) continue;
+          if(r.width < 80 || r.height < 80) continue;
           dialog = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
           break;
         }
-      } catch(e){}
+      }catch(e){}
       return JSON.stringify({
         type: dialog ? 'DIALOG' : 'PAGE',
-        elements: els.map(function(e){ return { sid: e.sid, tag: e.tag, text: e.text, x: e.x, y: e.y, w: e.w, h: e.h, isPost: false }; }),
+        elements: els.map(function(e){ return { sid: e.sid, tag: e.tag, text: e.text, x: e.x, y: e.y, w: e.rect.width, h: e.rect.height, isPost: false }; }),
         activeDialog: dialog
       });
-    } catch(e){
-      return JSON.stringify({ type: 'ERROR', elements: [], error: e.message });
-    }
+    }catch(e){ return JSON.stringify({ type: 'ERROR', elements: [], error: e.message }); }
   };
 })()
     `;
