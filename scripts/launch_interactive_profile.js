@@ -63,41 +63,45 @@ class ProfileScanner {
         } catch (e) {}
       }
 
-      // Check Default profile
-      if (fs.existsSync(path.join(def.userDataDir, 'Default'))) {
-        const info = profileInfoMap['Default'] || {};
+      // Check profile directories
+      const checkProfileDir = (dirName, isDefault) => {
+        const fullDirPath = path.join(def.userDataDir, dirName);
+        if (!fs.existsSync(fullDirPath)) return;
+
+        const info = profileInfoMap[dirName] || {};
+        let activeScore = (info.active_time || 0) * 1000;
+
+        const checkFiles = ['Preferences', 'History', 'Network', 'Sessions'];
+        for (const file of checkFiles) {
+          const fp = path.join(fullDirPath, file);
+          if (fs.existsSync(fp)) {
+            try {
+              const mtime = fs.statSync(fp).mtimeMs;
+              if (mtime > activeScore) activeScore = mtime;
+            } catch (e) {}
+          }
+        }
+
         profiles.push({
           browser: def.browser,
           exe: validExe,
           userDataDir: def.userDataDir,
-          profileDir: 'Default',
-          name: info.name || 'Perfil Predeterminado',
+          profileDir: dirName,
+          name: info.name || (isDefault ? 'Perfil Predeterminado' : dirName),
           userName: info.user_name || '',
-          activeTime: info.active_time || 0,
-          isDefault: true
+          activeTime: activeScore,
+          isDefault
         });
-      }
+      };
 
-      // Check Profile 1..Profile 50
+      checkProfileDir('Default', true);
+
       for (let i = 1; i <= 50; i++) {
-        const dirName = `Profile ${i}`;
-        if (fs.existsSync(path.join(def.userDataDir, dirName))) {
-          const info = profileInfoMap[dirName] || {};
-          profiles.push({
-            browser: def.browser,
-            exe: validExe,
-            userDataDir: def.userDataDir,
-            profileDir: dirName,
-            name: info.name || `Perfil ${i}`,
-            userName: info.user_name || '',
-            activeTime: info.active_time || 0,
-            isDefault: false
-          });
-        }
+        checkProfileDir(`Profile ${i}`, false);
       }
     }
 
-    return profiles;
+    return profiles.sort((a, b) => (b.activeTime || 0) - (a.activeTime || 0));
   }
 }
 
@@ -427,7 +431,7 @@ async function main() {
   console.log(`\n🚀 Iniciando ${selected.browser} con Perfil "${selected.name}" en Puerto CDP: ${targetPort}...`);
   saveLastProfile(selected);
 
-  // 3. AISLAMIENTO SEGURO Y CLONACIÓN DE SESIÓN (Garantiza 100% que Chromium abra el puerto CDP sin bloquearse)
+  // 3. AISLAMIENTO SEGURO Y CLONACIÓN COMPLETA (Garantiza que Chrome NUNCA bloquee el puerto CDP)
   const effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
   seedProfileIfNew(selected.userDataDir, selected.profileDir, effectiveUserDataDir);
   cleanProfileLocks(effectiveUserDataDir);

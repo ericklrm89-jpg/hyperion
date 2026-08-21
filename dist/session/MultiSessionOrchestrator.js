@@ -155,8 +155,9 @@ class MultiSessionOrchestrator {
      */
     async launchSession(profile, port) {
         ProfileManager_1.ProfileManager.saveLastProfile(profile);
-        // Usar directamente el directorio real del perfil para conservar 100% las cuentas y sesiones
-        const effectiveUserDataDir = profile.userDataDir;
+        // Preparar directorio de perfil aislado y clonar cookies/credenciales para que Chrome enlace el puerto CDP
+        const effectiveUserDataDir = PortSessionManager_1.PortSessionManager.getIsolatedUserDataDir(profile.browser, profile.profileDir);
+        ProfileManager_1.ProfileManager.seedProfileIfNew(profile.userDataDir, profile.profileDir, effectiveUserDataDir);
         ProfileManager_1.ProfileManager.cleanLocks(effectiveUserDataDir);
         const chromeFlags = [
             `--remote-debugging-port=${port}`,
