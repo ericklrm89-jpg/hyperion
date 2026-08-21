@@ -80,13 +80,14 @@ export async function executeSendWhatsApp(
 
   // 4. Insert Text into Footer ContentEditable
   const insertTextRes = await cxn.evaluate(`(() => {
-    const editables = Array.from(document.querySelectorAll('footer div[contenteditable="true"], div[contenteditable="true"]'));
+    const editables = Array.from(document.querySelectorAll('div[contenteditable="true"][data-tab="10"], footer div[contenteditable="true"], div[contenteditable="true"]'));
     const composer = editables[editables.length - 1];
     if (composer) {
       composer.focus();
       document.execCommand('selectAll', false, null);
       document.execCommand('delete', false, null);
       document.execCommand('insertText', false, ${JSON.stringify(input.message)});
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
       return true;
     }
     return false;
