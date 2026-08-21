@@ -24,5 +24,10 @@ export declare class ProfileManager {
      * Loads the last selected profile
      */
     static loadLastProfile(): ProfileMetadata | null;
+    /**
+     * Creates an NTFS Directory Junction pointing directly to the real user profile data.
+     * Bypasses Chromium's hardcoded default-directory remote-debugging restriction while operating 100% on real live files.
+     */
+    static getRealProfileJunctionDir(browser: string, nativeUserDataDir: string): string;
 }
 //# sourceMappingURL=ProfileManager.d.ts.map

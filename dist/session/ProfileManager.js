@@ -222,6 +222,34 @@ class ProfileManager {
         catch { }
         return null;
     }
+    /**
+     * Creates an NTFS Directory Junction pointing directly to the real user profile data.
+     * Bypasses Chromium's hardcoded default-directory remote-debugging restriction while operating 100% on real live files.
+     */
+    static getRealProfileJunctionDir(browser, nativeUserDataDir) {
+        const sanitized = browser.replace(/\s+/g, '_').toLowerCase();
+        const junctionDir = path.join(os.homedir(), '.hyperion', `real_${sanitized}_data`);
+        const parent = path.dirname(junctionDir);
+        if (!fs.existsSync(parent))
+            fs.mkdirSync(parent, { recursive: true });
+        if (fs.existsSync(junctionDir)) {
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const { execSync } = require('child_process');
+                execSync(`rmdir "${junctionDir}"`, { stdio: 'ignore', shell: 'cmd.exe' });
+            }
+            catch { }
+        }
+        if (!fs.existsSync(junctionDir)) {
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const { execSync } = require('child_process');
+                execSync(`mklink /J "${junctionDir}" "${nativeUserDataDir}"`, { stdio: 'ignore', shell: 'cmd.exe' });
+            }
+            catch { }
+        }
+        return fs.existsSync(junctionDir) ? junctionDir : nativeUserDataDir;
+    }
 }
 exports.ProfileManager = ProfileManager;
 //# sourceMappingURL=ProfileManager.js.map

@@ -155,10 +155,10 @@ class MultiSessionOrchestrator {
      */
     async launchSession(profile, port) {
         ProfileManager_1.ProfileManager.saveLastProfile(profile);
-        // Preparar directorio de perfil aislado y clonar cookies/credenciales para que Chrome enlace el puerto CDP
-        const effectiveUserDataDir = PortSessionManager_1.PortSessionManager.getIsolatedUserDataDir(profile.browser, profile.profileDir);
-        ProfileManager_1.ProfileManager.seedProfileIfNew(profile.userDataDir, profile.profileDir, effectiveUserDataDir);
+        // BYPASS MAESTRO AL PERFIL REAL NATIVO (Directory Junction NTFS directo al User Data original)
+        const effectiveUserDataDir = ProfileManager_1.ProfileManager.getRealProfileJunctionDir(profile.browser, profile.userDataDir);
         ProfileManager_1.ProfileManager.cleanLocks(effectiveUserDataDir);
+        ProfileManager_1.ProfileManager.cleanLocks(profile.userDataDir);
         const chromeFlags = [
             `--remote-debugging-port=${port}`,
             '--remote-allow-origins=*',

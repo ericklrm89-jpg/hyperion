@@ -157,6 +157,27 @@ class PortSessionManager {
     this.saveActiveSessions(sessions);
   }
 
+  static getRealProfileJunctionDir(browser, nativeUserDataDir) {
+    const sanitized = browser.replace(/\s+/g, '_').toLowerCase();
+    const junctionDir = path.join(os.homedir(), '.hyperion', `real_${sanitized}_data`);
+    const parent = path.dirname(junctionDir);
+    if (!fs.existsSync(parent)) fs.mkdirSync(parent, { recursive: true });
+
+    if (fs.existsSync(junctionDir)) {
+      try {
+        execSync(`rmdir "${junctionDir}"`, { stdio: 'ignore', shell: 'cmd.exe' });
+      } catch (e) {}
+    }
+
+    if (!fs.existsSync(junctionDir)) {
+      try {
+        execSync(`mklink /J "${junctionDir}" "${nativeUserDataDir}"`, { stdio: 'ignore', shell: 'cmd.exe' });
+      } catch (e) {}
+    }
+
+    return fs.existsSync(junctionDir) ? junctionDir : nativeUserDataDir;
+  }
+
   static getIsolatedUserDataDir(browser, profileDir) {
     const sanitizedBrowser = browser.replace(/\s+/g, '_').toLowerCase();
     const sanitizedDir = profileDir.replace(/\s+/g, '_');
@@ -431,13 +452,15 @@ async function main() {
   console.log(`\n🚀 Iniciando ${selected.browser} con Perfil "${selected.name}" en Puerto CDP: ${targetPort}...`);
   saveLastProfile(selected);
 
-  // 3. AISLAMIENTO SEGURO Y CLONACIÓN COMPLETA (Garantiza que Chrome NUNCA bloquee el puerto CDP)
-  const effectiveUserDataDir = PortSessionManager.getIsolatedUserDataDir(selected.browser, selected.profileDir);
-  seedProfileIfNew(selected.userDataDir, selected.profileDir, effectiveUserDataDir);
+  // 3. BYPASS MAESTRO AL PERFIL REAL NATIVO (Directory Junction a nivel de Kernel NTFS)
+  // Enlaza directamente la carpeta real User Data sin clonación ni copias, bypassando la restricción de Chrome
+  const effectiveUserDataDir = PortSessionManager.getRealProfileJunctionDir(selected.browser, selected.userDataDir);
   cleanProfileLocks(effectiveUserDataDir);
+  cleanProfileLocks(selected.userDataDir);
 
   const launchBrowser = () => {
     cleanProfileLocks(effectiveUserDataDir);
+    cleanProfileLocks(selected.userDataDir);
     const chromeFlags = [
       `--remote-debugging-port=${targetPort}`,
       '--remote-allow-origins=*',
