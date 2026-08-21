@@ -56,7 +56,7 @@ async function executeSendWhatsApp(cxn, rawInput, options) {
     if (okBtn) okBtn.click();
   })()`);
     await sleep(1000);
-    // 4. Insert Text into Footer ContentEditable
+    // 4. Insert Text into Footer ContentEditable via DataTransfer Paste (Preserves all newlines)
     const insertTextRes = await cxn.evaluate(`(() => {
     const editables = Array.from(document.querySelectorAll('div[contenteditable="true"][data-tab="10"], footer div[contenteditable="true"], div[contenteditable="true"]'));
     const composer = editables[editables.length - 1];
@@ -64,7 +64,10 @@ async function executeSendWhatsApp(cxn, rawInput, options) {
       composer.focus();
       document.execCommand('selectAll', false, null);
       document.execCommand('delete', false, null);
-      document.execCommand('insertText', false, ${JSON.stringify(input.message)});
+      const dt = new DataTransfer();
+      dt.setData('text/plain', ${JSON.stringify(input.message)});
+      const pasteEvent = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+      composer.dispatchEvent(pasteEvent);
       composer.dispatchEvent(new Event('input', { bubbles: true }));
       return true;
     }
@@ -74,30 +77,36 @@ async function executeSendWhatsApp(cxn, rawInput, options) {
         throw new Error('Could not find active message composer in WhatsApp Web');
     }
     await sleep(1000);
-    // 5. Send Text
+    // 5. Send Text with Enter + Button Fallback
     await cxn.dispatchKeyEvent({ type: 'rawKeyDown', key: 'Enter', windowsVirtualKeyCode: 13 });
     await cxn.dispatchKeyEvent({ type: 'keyUp', key: 'Enter', windowsVirtualKeyCode: 13 });
     await sleep(1000);
-    // Click Send Button if still visible
     await cxn.evaluate(`(() => {
-    const sendBtn = document.querySelector('button[aria-label="Enviar"]') || document.querySelector('span[data-icon="send"]');
+    const sendBtn = document.querySelector('footer span[data-icon="wds-ic-send-filled"]') ||
+                    document.querySelector('footer span[data-icon="send"]') ||
+                    document.querySelector('button[aria-label="Enviar"]');
     if (sendBtn) {
-      const clickEl = sendBtn.closest('button') || sendBtn;
+      const clickEl = sendBtn.closest('button, div[role="button"]') || sendBtn;
       clickEl.click();
     }
   })()`);
     await sleep(2000);
-    // 6. Direct DOM File Injection if media specified
+    // 6. Direct DOM File Injection for HD Photo if media specified
     if (input.mediaPath) {
-        logger_1.logger.info({ media: input.mediaPath }, '[WhatsApp] Inyectando adjunto mediante DOM.setFileInputFiles');
-        const doc = await cxn.call('DOM.getDocument', { depth: -1, pierce: true });
-        const queryRes = await cxn.call('DOM.querySelector', {
-            nodeId: doc.root.nodeId,
-            selector: 'input[type="file"]',
-        });
-        if (queryRes?.nodeId) {
-            const nodeInfo = await cxn.call('DOM.describeNode', { nodeId: queryRes.nodeId });
-            const backendNodeId = nodeInfo.node.backendNodeId;
+        logger_1.logger.info({ media: input.mediaPath }, '[WhatsApp] Inyectando adjunto multimedia HD mediante DOM.setFileInputFiles');
+        // Desplegar menú de adjuntos (+)
+        await cxn.evaluate(`(() => {
+      const plus = document.querySelector('span[data-icon="plus"]') || 
+                   document.querySelector('span[data-icon="attach-menu-plus"]') ||
+                   document.querySelector('div[title*="Adjuntar"]');
+      if (plus) plus.closest('button, div[role="button"]').click();
+    })()`);
+        await sleep(1200);
+        const evalInput = await cxn.evaluate(`document.querySelector('input[accept*="image"]') || document.querySelector('input[type="file"]')`);
+        const objectId = evalInput?.objectId;
+        if (objectId) {
+            const desc = await cxn.call('DOM.describeNode', { objectId });
+            const backendNodeId = desc?.node?.backendNodeId;
             if (backendNodeId) {
                 await cxn.call('DOM.setFileInputFiles', {
                     backendNodeId,
@@ -106,13 +115,17 @@ async function executeSendWhatsApp(cxn, rawInput, options) {
                 await sleep(3500);
                 // Click media send button
                 await cxn.evaluate(`(() => {
-          const mediaSend = document.querySelector('span[data-icon="send"]') || document.querySelector('div[aria-label="Enviar"]');
+          const mediaSend = document.querySelector('div[data-animate-media-viewer="true"] span[data-icon="wds-ic-send-filled"]') ||
+                            document.querySelector('div[data-animate-media-viewer="true"] span[data-icon="send"]') ||
+                            document.querySelector('span[data-icon="wds-ic-send-filled"]') ||
+                            document.querySelector('span[data-icon="send"]') ||
+                            document.querySelector('div[aria-label="Enviar"]');
           if (mediaSend) {
             const btn = mediaSend.closest('div[role="button"]') || mediaSend.closest('button') || mediaSend;
             btn.click();
           }
         })()`);
-                await sleep(3000);
+                await sleep(4000);
             }
         }
     }

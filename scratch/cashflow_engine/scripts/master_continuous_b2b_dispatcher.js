@@ -373,13 +373,50 @@ async function sendWhatsAppProposal(lead) {
 
   await new Promise(r => setTimeout(r, 1500));
 
-  // Inyectar Foto HD
-  console.log('1. Abriendo menú de adjuntos...');
-  const flyerFile = path.join(ASSETS_DIR, lead.flyer || 'nanoai_b2b_square_hd_flyer.jpg').replace(/\\/g, '/');
-  const actualFlyer = fs.existsSync(flyerFile) ? flyerFile : path.join(ASSETS_DIR, 'nanoai_b2b_square_hd_flyer.jpg').replace(/\\/g, '/');
+  // 1. ENVIAR TEXTO DE NEUROVENTAS COMPLETO (Paso 1)
+  console.log('1. Redactando Texto de Neuroventas en el Footer...');
+  const waText = `Hola estimado equipo de *${lead.company}* 👋 Le saluda Erick, Director Técnico de NanoAI en Quito.\n\nLe comparto arriba la ficha técnica de cómo funciona nuestro software industrial On-Premise para optimizar procesos en empresas de *${lead.sector}* en su propia red local (sin mensualidades en la nube).\n\n🎁 Por lanzamiento en la zona incluimos *3 MESES GRATIS DE SOPORTE TÉCNICO* y una visita presencial de diagnóstico de 20 minutos sin costo.\n\n¿Qué día de esta semana tendrían 20 minutos para coordinar la visita técnica presencial en su planta?\n🌐 https://nanoai.ec`;
 
-  // 1. Abrir menú de adjuntos (+)
-  console.log('1. Abriendo menú de adjuntos (+) para Foto HD...');
+  // Limpiar y pegar texto multilínea garantizado
+  await call('Runtime.evaluate', {
+    expression: `(() => {
+      const composer = document.querySelector('footer div[contenteditable="true"]');
+      if (composer) {
+        composer.focus();
+        document.execCommand('selectAll', false, null);
+        document.execCommand('delete', false, null);
+        const dt = new DataTransfer();
+        dt.setData('text/plain', ${JSON.stringify(waText)});
+        const pasteEvent = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+        composer.dispatchEvent(pasteEvent);
+        composer.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    })()`
+  });
+  await new Promise(r => setTimeout(r, 1200));
+
+  // Disparar envío del texto con Enter
+  console.log('2. Enviando Texto con Enter...');
+  await call('Input.dispatchKeyEvent', { type: 'rawKeyDown', windowsVirtualKeyCode: 13, text: '\r' });
+  await call('Input.dispatchKeyEvent', { type: 'keyUp', windowsVirtualKeyCode: 13 });
+  await new Promise(r => setTimeout(r, 1000));
+
+  // Clic de respaldo en botón Enviar si quedó visible
+  await call('Runtime.evaluate', {
+    expression: `(() => {
+      const sendBtn = document.querySelector('footer span[data-icon="wds-ic-send-filled"]') ||
+                      document.querySelector('footer span[data-icon="send"]') ||
+                      document.querySelector('footer button[aria-label="Enviar"]');
+      if (sendBtn) {
+        const b = sendBtn.closest('button, div[role="button"]') || sendBtn;
+        b.click();
+      }
+    })()`
+  });
+  await new Promise(r => setTimeout(r, 3000));
+
+  // 2. ENVIAR FOTO HD (Paso 2)
+  console.log('3. Abriendo menú (+) para Foto HD...');
   const flyerFile = path.join(ASSETS_DIR, lead.flyer || 'nanoai_b2b_square_hd_flyer.jpg').replace(/\\/g, '/');
   const actualFlyer = fs.existsSync(flyerFile) ? flyerFile : path.join(ASSETS_DIR, 'nanoai_b2b_square_hd_flyer.jpg').replace(/\\/g, '/');
 
@@ -393,7 +430,6 @@ async function sendWhatsAppProposal(lead) {
   });
   await new Promise(r => setTimeout(r, 1200));
 
-  // Obtener RemoteObjectId directo del input de fotos y videos
   const evalInput = await call('Runtime.evaluate', {
     expression: `document.querySelector('input[accept*="image"]') || document.querySelector('input[type="file"]')`,
     returnByValue: false
@@ -405,35 +441,11 @@ async function sendWhatsAppProposal(lead) {
     const backendNodeId = desc?.node?.backendNodeId;
 
     if (backendNodeId) {
-      console.log('2. Inyectando Foto HD en input multimedia...');
+      console.log('4. Inyectando Foto HD en input multimedia...');
       await call('DOM.setFileInputFiles', { backendNodeId, files: [actualFlyer] });
       await new Promise(r => setTimeout(r, 3500));
 
-      // Preparar texto de neuroventas
-      const waText = `Hola estimado equipo de *${lead.company}* 👋 Le saluda Erick, Director Técnico de NanoAI en Quito.\n\nLe comparto la ficha técnica de cómo funciona nuestro software industrial On-Premise para optimizar procesos en empresas de *${lead.sector}* en su propia red local (sin mensualidades en la nube).\n\n🎁 Por lanzamiento en la zona incluimos *3 MESES GRATIS DE SOPORTE TÉCNICO* y una visita presencial de diagnóstico de 20 minutos sin costo.\n\n¿Qué día de esta semana tendrían 20 minutos para coordinar la visita técnica presencial en su planta?`;
-
-      console.log('3. Inyectando pie de foto en el editor multimedia...');
-      await call('Runtime.evaluate', {
-        expression: `(() => {
-          const captionBox = document.querySelector('div[data-animate-media-viewer="true"] div[contenteditable="true"]') ||
-                             document.querySelector('div[contenteditable="true"][data-tab="10"]') ||
-                             document.querySelector('div[role="textbox"]');
-          if (captionBox) {
-            captionBox.focus();
-            document.execCommand('selectAll', false, null);
-            document.execCommand('delete', false, null);
-            document.execCommand('insertText', false, ${JSON.stringify(waText)});
-            captionBox.dispatchEvent(new Event('input', { bubbles: true }));
-          }
-        })()`
-      });
-      await new Promise(r => setTimeout(r, 1500));
-
-      console.log('4. Enviando Foto HD con pie de foto...');
-      await call('Input.dispatchKeyEvent', { type: 'rawKeyDown', windowsVirtualKeyCode: 13, text: '\r' });
-      await call('Input.dispatchKeyEvent', { type: 'keyUp', windowsVirtualKeyCode: 13 });
-      await new Promise(r => setTimeout(r, 1000));
-
+      console.log('5. Clic en botón Enviar Foto HD...');
       await call('Runtime.evaluate', {
         expression: `(() => {
           const sendBtn = document.querySelector('div[data-animate-media-viewer="true"] span[data-icon="wds-ic-send-filled"]') ||
